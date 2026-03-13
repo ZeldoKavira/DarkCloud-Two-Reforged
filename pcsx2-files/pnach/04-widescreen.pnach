@@ -1,0 +1,4 @@
+// Widescreen 16:9 (by nemesis2000)
+// Controlled by WIDESCREEN_FLAG at 0x01F7002C
+patch=1,EE,E0010001,extended,01F7002C
+patch=1,EE,20138D78,extended,3F023F40

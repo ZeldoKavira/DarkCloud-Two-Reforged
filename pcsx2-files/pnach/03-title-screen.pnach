@@ -1,56 +1,16 @@
-gametitle=Dark Cloud 2 [SCUS 97213] (U) [1DF41F33]
-
-// ======== 00-flags ========
-// Mod runtime flags — always active
-patch=1,EE,21F70020,extended,00000001 // PNACH active flag
-
-// ======== 01-save-blocker ========
-// Block Continue when mod not running (MOD_FLAG == 0)
-// Forces TitleInfo[0] back to 1 when it transitions to 2
-patch=1,EE,E0030000,extended,01F70024
-patch=1,EE,E0020003,extended,00376FCC
-patch=1,EE,E0010002,extended,006FBA40
-patch=1,EE,206FBA40,extended,00000001
-// Reset TitlePhase when TitleInfo[1] == 2
-patch=1,EE,E0020000,extended,01F70024
-patch=1,EE,E0010002,extended,006FBA44
-patch=1,EE,10377E98,extended,00000001
-
-// ======== 02-fast-start ========
-// Fast Start: skip intro when FAST_START_FLAG == 1
-// If FAST_START && LoopNo==3 && info0==0 → force info0=1
-patch=1,EE,E0030001,extended,01F70028
-patch=1,EE,E0020003,extended,00376FCC
-patch=1,EE,E0010000,extended,006FBA40
-patch=1,EE,206FBA40,extended,00000001
-// If FAST_START && LoopNo==3 && info0==3 → force info0=1
-patch=1,EE,E0030001,extended,01F70028
-patch=1,EE,E0020003,extended,00376FCC
-patch=1,EE,E0010003,extended,006FBA40
-patch=1,EE,206FBA40,extended,00000001
-// If FAST_START && LoopNo==3 && info0==4 → force info0=1
-patch=1,EE,E0030001,extended,01F70028
-patch=1,EE,E0020003,extended,00376FCC
-patch=1,EE,E0010004,extended,006FBA40
-patch=1,EE,206FBA40,extended,00000001
-// If FAST_START && LoopNo==3 && info0==1 && TitlePhase==0 → force phase=1
-patch=1,EE,E0040001,extended,01F70028
-patch=1,EE,E0030003,extended,00376FCC
-patch=1,EE,E0020001,extended,006FBA40
-patch=1,EE,E0010000,extended,00377E98
-patch=1,EE,10377E98,extended,00000001
-
-// ======== 03-title-screen ========
 // Hook control: swap TitleModeDraw call based on title screen state
 patch=1,EE,202A0B30,extended,0C0A86D8 // default: original jal TitleModeDraw
+
 // Menu button screen (TitleInfo[0]==1, TitlePhase==1) → message cave
 patch=1,EE,E0020001,extended,006FBA40
 patch=1,EE,E0010001,extended,00377E98
 patch=1,EE,202A0B30,extended,0C7DC040 // jal cave 0x01F70100
+
 // Press Start screen (TitleInfo[0]==1, TitlePhase==0) → title cave
 patch=1,EE,E0020001,extended,006FBA40
 patch=1,EE,E0010000,extended,00377E98
 patch=1,EE,202A0B30,extended,0C7DC080 // jal cave 0x01F70200
+
 // === Code cave 0x01F70100: "Launch DC2 Reforged" message (mod not running) ===
 patch=1,EE,21F70100,extended,27BDFFF0
 patch=1,EE,21F70104,extended,AFBF0000
@@ -112,6 +72,7 @@ patch=1,EE,21F701C4,extended,00000000
 patch=1,EE,21F701C8,extended,8FBF0000
 patch=1,EE,21F701CC,extended,03E00008
 patch=1,EE,21F701D0,extended,27BD0010
+
 // === Code cave 0x01F70200: "REFORGED" on title screen ===
 patch=1,EE,21F70200,extended,27BDFFF0
 patch=1,EE,21F70204,extended,AFBF0000
@@ -202,6 +163,7 @@ patch=1,EE,21F70324,extended,34060012
 patch=1,EE,21F70328,extended,8FBF0000
 patch=1,EE,21F7032C,extended,03E00008
 patch=1,EE,21F70330,extended,27BD0010
+
 // === Strings ===
 // "Launch DC2 Reforged" at 0x01F70080
 patch=1,EE,21F70080,extended,6E75614C
@@ -223,103 +185,3 @@ patch=1,EE,21F700C0,extended,00002E61
 patch=1,EE,21F700D0,extended,4F464552
 patch=1,EE,21F700D4,extended,44454752
 patch=1,EE,21F700D8,extended,00000000
-
-// ======== 04-widescreen ========
-// Widescreen 16:9 (by nemesis2000)
-// Controlled by WIDESCREEN_FLAG at 0x01F7002C
-patch=1,EE,E0010001,extended,01F7002C
-patch=1,EE,20138D78,extended,3F023F40
-
-// ======== 05-dialog-system ========
-// Dialog system: triggers system message dialogs
-// DIALOG_FLAG   (0x01F70030): write msg ID to trigger dialog
-// DIALOG_MODE   (0x01F70038): 0/4=passive (no input), 5=interactive (Step called)
-// DIALOG_ACTIVE (0x01F7003C): 1=dialog showing, managed by cave
-// Hook: replace jal mgGetNowFrameRate at main loop
-patch=1,EE,201914A8,extended,0C7DC100
-// === Code cave at 0x01F70400 ===
-// Prologue
-patch=1,EE,21F70400,extended,27BDFFD0 // addiu sp, -48
-patch=1,EE,21F70404,extended,AFBF0000 // sw ra, 0(sp)
-patch=1,EE,21F70408,extended,AFB00004 // sw s0, 4(sp)
-patch=1,EE,21F7040C,extended,AFB10008 // sw s1, 8(sp)
-patch=1,EE,21F70410,extended,0C050874 // jal mgGetNowFrameRate
-patch=1,EE,21F70414,extended,00000000 // nop
-patch=1,EE,21F70418,extended,AFA2000C // sw v0, 12(sp) — save return
-// --- Check DIALOG_FLAG ---
-patch=1,EE,21F7041C,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F70420,extended,8C420030 // lw v0, 0x0030(v0)
-patch=1,EE,21F70424,extended,10400022 // beq v0, zero, skip_create (0x4B0)
-patch=1,EE,21F70428,extended,00000000 // nop
-// s0 = msg ID, clear flag
-patch=1,EE,21F7042C,extended,00408025 // move s0, v0
-patch=1,EE,21F70430,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F70434,extended,AC400030 // sw zero, 0x0030(v0)
-// s1 = mode, clear, default 4
-patch=1,EE,21F70438,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F7043C,extended,8C510038 // lw s1, 0x0038(v0)
-patch=1,EE,21F70440,extended,AC400038 // sw zero, 0x0038(v0)
-patch=1,EE,21F70444,extended,16200002 // bne s1, zero, +2
-patch=1,EE,21F70448,extended,00000000 // nop
-patch=1,EE,21F7044C,extended,34110004 // li s1, 4
-// GetSystemMessage(0)
-patch=1,EE,21F70450,extended,0C0659E0 // jal GetSystemMessage
-patch=1,EE,21F70454,extended,34040000 // li a0, 0
-patch=1,EE,21F70458,extended,AFA20010 // sw v0, 16(sp) — save clsmes
-// +0x1B2C = 0x46
-patch=1,EE,21F7045C,extended,34030046 // li v1, 0x46
-patch=1,EE,21F70460,extended,AC431B2C // sw v1, 0x1B2C(v0)
-// Preset(clsmes, mode)
-patch=1,EE,21F70464,extended,00402025 // move a0, v0
-patch=1,EE,21F70468,extended,0C054BB4 // jal Preset
-patch=1,EE,21F7046C,extended,02202825 // move a1, s1 (delay)
-// SetWindowMode(clsmes, mode)
-patch=1,EE,21F70470,extended,8FA40010 // lw a0, 16(sp)
-patch=1,EE,21F70474,extended,0C054CDC // jal SetWindowMode
-patch=1,EE,21F70478,extended,02202825 // move a1, s1 (delay)
-// +0x17E4 = -1
-patch=1,EE,21F7047C,extended,8FA20010 // lw v0, 16(sp)
-patch=1,EE,21F70480,extended,2403FFFF // li v1, -1
-patch=1,EE,21F70484,extended,AC4317E4 // sw v1, 0x17E4(v0)
-patch=1,EE,21F70488,extended,00000000 // nop (was +0x14C=8)
-patch=1,EE,21F7048C,extended,00000000 // nop
-// MakeMesWin(clsmes, msg_id)
-patch=1,EE,21F70490,extended,8FA40010 // lw a0, 16(sp)
-patch=1,EE,21F70494,extended,0C0562C8 // jal MakeMesWin
-patch=1,EE,21F70498,extended,02002825 // move a1, s0 (delay)
-// Set DIALOG_ACTIVE = 1, branch to epilogue
-patch=1,EE,21F7049C,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F704A0,extended,34030001 // li v1, 1
-patch=1,EE,21F704A4,extended,AC43003C // sw v1, 0x003C(v0)
-patch=1,EE,21F704A8,extended,10000012 // b epilogue (0x4F4)
-patch=1,EE,21F704AC,extended,00000000 // nop (delay)
-// skip_create (0x4B0):
-// --- Per-frame: if DIALOG_ACTIVE, call Step ---
-patch=1,EE,21F704B0,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F704B4,extended,8C42003C // lw v0, 0x003C(v0)
-patch=1,EE,21F704B8,extended,1040000E // beq zero, epilogue (0x4F4)
-patch=1,EE,21F704BC,extended,00000000 // nop
-// GetSystemMessage(0) for clsmes
-patch=1,EE,21F704C0,extended,0C0659E0 // jal GetSystemMessage
-patch=1,EE,21F704C4,extended,34040000 // li a0, 0
-// Check +0x17E4 != -1
-patch=1,EE,21F704C8,extended,8C4317E4 // lw v1, 0x17E4(v0)
-patch=1,EE,21F704CC,extended,00402025 // move a0, v0 — save clsmes in a0
-patch=1,EE,21F704D0,extended,2402FFFF // li v0, -1
-patch=1,EE,21F704D4,extended,14620005 // bne v1, v0, still_active (0x4EC)
-patch=1,EE,21F704D8,extended,00000000 // nop
-// Dismissed: clear DIALOG_ACTIVE
-patch=1,EE,21F704DC,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F704E0,extended,AC40003C // sw zero, 0x003C(v0)
-patch=1,EE,21F704E4,extended,10000003 // b epilogue (0x4F4)
-patch=1,EE,21F704E8,extended,00000000 // nop
-// still_active (0x4EC): nop (Step disabled for now)
-patch=1,EE,21F704EC,extended,00000000 // nop
-patch=1,EE,21F704F0,extended,00000000 // nop
-// Epilogue (0x4F4)
-patch=1,EE,21F704F4,extended,8FA2000C // lw v0, 12(sp) — restore return
-patch=1,EE,21F704F8,extended,8FB10008 // lw s1, 8(sp)
-patch=1,EE,21F704FC,extended,8FB00004 // lw s0, 4(sp)
-patch=1,EE,21F70500,extended,8FBF0000 // lw ra, 0(sp)
-patch=1,EE,21F70504,extended,03E00008 // jr ra
-patch=1,EE,21F70508,extended,27BD0030 // addiu sp, 48 (delay)

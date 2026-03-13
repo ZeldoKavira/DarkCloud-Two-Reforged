@@ -93,6 +93,7 @@ class GameState:
         self.mem = mem
         self.snapshot = GameSnapshot()
         self._callbacks = []
+        self._prev_title = (None, None, None, None, None)  # loop, info0, info1, cursor, phase
 
     def on_update(self, cb):
         self._callbacks.append(cb)
@@ -183,3 +184,11 @@ class GameState:
                 snap.title.title_info_8 = mem.read_short(ptr + 8)
             snap.title.title_phase = mem.read_short(addr.TITLE_PHASE)
             snap.title.instr_002a0134 = mem.read_int(0x202A0134)
+
+        # Log title state changes
+        cur = (snap.loop_no, snap.title.title_info_0, snap.title.title_info_1,
+               snap.title.title_info_8, snap.title.title_phase)
+        if cur != self._prev_title:
+            log.info("Title: loop=%d info0=%d info1=%d cursor=%d phase=%d",
+                     *cur)
+            self._prev_title = cur

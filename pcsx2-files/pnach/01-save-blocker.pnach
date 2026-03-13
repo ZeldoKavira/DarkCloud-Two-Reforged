@@ -1,0 +1,11 @@
+// Block Continue when mod not running (MOD_FLAG == 0)
+// Forces TitleInfo[0] back to 1 when it transitions to 2
+patch=1,EE,E0030000,extended,01F70024
+patch=1,EE,E0020003,extended,00376FCC
+patch=1,EE,E0010002,extended,006FBA40
+patch=1,EE,206FBA40,extended,00000001
+
+// Reset TitlePhase when TitleInfo[1] == 2
+patch=1,EE,E0020000,extended,01F70024
+patch=1,EE,E0010002,extended,006FBA44
+patch=1,EE,10377E98,extended,00000001

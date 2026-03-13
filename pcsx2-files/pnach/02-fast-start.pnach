@@ -1,0 +1,26 @@
+// Fast Start: skip intro when FAST_START_FLAG == 1
+
+// If FAST_START && LoopNo==3 && info0==0 → force info0=1
+patch=1,EE,E0030001,extended,01F70028
+patch=1,EE,E0020003,extended,00376FCC
+patch=1,EE,E0010000,extended,006FBA40
+patch=1,EE,206FBA40,extended,00000001
+
+// If FAST_START && LoopNo==3 && info0==3 → force info0=1
+patch=1,EE,E0030001,extended,01F70028
+patch=1,EE,E0020003,extended,00376FCC
+patch=1,EE,E0010003,extended,006FBA40
+patch=1,EE,206FBA40,extended,00000001
+
+// If FAST_START && LoopNo==3 && info0==4 → force info0=1
+patch=1,EE,E0030001,extended,01F70028
+patch=1,EE,E0020003,extended,00376FCC
+patch=1,EE,E0010004,extended,006FBA40
+patch=1,EE,206FBA40,extended,00000001
+
+// If FAST_START && LoopNo==3 && info0==1 && TitlePhase==0 → force phase=1
+patch=1,EE,E0040001,extended,01F70028
+patch=1,EE,E0030003,extended,00376FCC
+patch=1,EE,E0020001,extended,006FBA40
+patch=1,EE,E0010000,extended,00377E98
+patch=1,EE,10377E98,extended,00000001

@@ -17,7 +17,8 @@ def main():
     app = App(state)
 
     def _quit(*args):
-        app._on_close()
+        app.manager.stop_nowait()
+        app.state.mem.disconnect()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _quit)

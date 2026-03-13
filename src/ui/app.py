@@ -3,7 +3,9 @@
 import logging
 import tkinter as tk
 from tkinter import ttk
+from core import settings
 from game.game_state import GameState, GameSnapshot
+from game import addresses as addr
 from mods.manager import ModManager
 
 logging.basicConfig(
@@ -28,8 +30,14 @@ class App:
         self.state = state
         self.manager = ModManager(state.mem, state)
 
+        # Load saved settings
+        self.manager.fast_start = settings.get("fast_start") or False
+        self.manager.widescreen = settings.get("widescreen") or False
+
         self.root = tk.Tk()
         from core.version import get_version
+        from game.dialog import Dialog
+        self.dialog = Dialog(state.mem, self.root)
         self.root.title(f"Dark Cloud 2 Reforged {get_version()}")
         self.root.geometry("720x500")
         self.root.configure(bg=BG)
@@ -44,12 +52,16 @@ class App:
         style.configure("Sub.TLabel", background=BG_PANEL, foreground=FG, font=("Helvetica", 10))
         style.configure("Dim.TLabel", background=BG_PANEL, foreground=FG_DIM, font=("Helvetica", 9))
         style.configure("Status.TLabel", background=BG, foreground=GREEN, font=("Helvetica", 11, "bold"))
+        style.configure("TNotebook", background=BG)
+        style.configure("TNotebook.Tab", background=ACCENT, foreground=FG, padding=(10, 4))
+        style.map("TNotebook.Tab", background=[("selected", BG_PANEL)])
 
         self._build_ui()
         self.state.on_update(self._on_state_update)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build_ui(self):
+        # Header
         header = ttk.Frame(self.root)
         header.pack(fill=tk.X, padx=10, pady=(10, 5))
         ttk.Label(header, text="Dark Cloud 2 Reforged", style="Header.TLabel").pack(side=tk.LEFT)
@@ -58,15 +70,36 @@ class App:
         self.status_label = ttk.Label(header, text="Connecting...", style="Status.TLabel")
         self.status_label.pack(side=tk.RIGHT)
 
-        container = ttk.Frame(self.root)
-        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # Tabs
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        canvas = tk.Canvas(container, bg=BG, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(container, orient=tk.VERTICAL, command=canvas.yview)
-        self._scroll_frame = ttk.Frame(canvas)
-        self._scroll_frame.bind("<Configure>",
+        self._build_data_tab()
+        self._build_settings_tab()
+
+        # Log area
+        log_frame = ttk.Frame(self.root)
+        log_frame.pack(fill=tk.BOTH, expand=False, padx=10, pady=(0, 10))
+        ttk.Label(log_frame, text="Log", style="Header.TLabel").pack(anchor=tk.W)
+        self.log_text = tk.Text(
+            log_frame, height=6, bg="#0d1117", fg="#8b949e",
+            font=("Courier", 9), state=tk.DISABLED, wrap=tk.WORD,
+            borderwidth=1, relief=tk.SOLID,
+        )
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+        self._log_handler = TextHandler(self.log_text, self.root)
+        logging.getLogger().addHandler(self._log_handler)
+
+    def _build_data_tab(self):
+        tab = ttk.Frame(self.notebook)
+        self.notebook.add(tab, text="Data")
+
+        canvas = tk.Canvas(tab, bg=BG, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(tab, orient=tk.VERTICAL, command=canvas.yview)
+        scroll_frame = ttk.Frame(canvas)
+        scroll_frame.bind("<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self._scroll_frame, anchor="nw")
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -81,8 +114,7 @@ class App:
             canvas.itemconfig(canvas.find_all()[0], width=event.width)
         canvas.bind("<Configure>", _on_canvas_resize)
 
-        sf = self._scroll_frame
-        content = ttk.Frame(sf)
+        content = ttk.Frame(scroll_frame)
         content.pack(fill=tk.BOTH, expand=True)
         content.columnconfigure(0, weight=1)
         content.columnconfigure(1, weight=1)
@@ -113,12 +145,6 @@ class App:
             "PNACH", "Mod Flag", "Enhanced Save",
         ])
 
-        self._fast_start_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(self.flags_panel, text="Fast Start Game", variable=self._fast_start_var,
-                        command=self._toggle_fast_start, bg=BG_PANEL, fg=FG,
-                        selectcolor=BG, activebackground=BG_PANEL, activeforeground=FG,
-                        font=("Helvetica", 10)).pack(anchor=tk.W, padx=10, pady=(0, 5))
-
         self.dng_panel = self._panel(right, "Dungeon")
         self.dng_fields = self._add_fields(self.dng_panel, [
             "Status",
@@ -130,18 +156,43 @@ class App:
             "Instr@0x2A0134",
         ])
 
-        # Log area
-        log_frame = ttk.Frame(self.root)
-        log_frame.pack(fill=tk.BOTH, expand=False, padx=10, pady=(0, 10))
-        ttk.Label(log_frame, text="Log", style="Header.TLabel").pack(anchor=tk.W)
-        self.log_text = tk.Text(
-            log_frame, height=6, bg="#0d1117", fg="#8b949e",
-            font=("Courier", 9), state=tk.DISABLED, wrap=tk.WORD,
-            borderwidth=1, relief=tk.SOLID,
-        )
-        self.log_text.pack(fill=tk.BOTH, expand=True)
-        self._log_handler = TextHandler(self.log_text, self.root)
-        logging.getLogger().addHandler(self._log_handler)
+    def _build_settings_tab(self):
+        tab = ttk.Frame(self.notebook)
+        self.notebook.add(tab, text="Settings")
+
+        inner = ttk.Frame(tab, style="Panel.TFrame")
+        inner.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Label(inner, text="Game Options", background=ACCENT, foreground=FG,
+                  font=("Helvetica", 10, "bold"), padding=(8, 3)).pack(fill=tk.X)
+
+        opts = ttk.Frame(inner, style="Panel.TFrame")
+        opts.pack(fill=tk.X, padx=8, pady=8)
+
+        self._fast_start_var = tk.BooleanVar(value=self.manager.fast_start)
+        tk.Checkbutton(opts, text="Fast Start Game", variable=self._fast_start_var,
+                       command=self._toggle_fast_start, bg=BG_PANEL, fg=FG,
+                       selectcolor=BG, activebackground=BG_PANEL, activeforeground=FG,
+                       font=("Helvetica", 10)).pack(anchor=tk.W, pady=2)
+        ttk.Label(opts, text="Skip intro and go straight to the menu on boot",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
+        self._widescreen_var = tk.BooleanVar(value=self.manager.widescreen)
+        tk.Checkbutton(opts, text="Widescreen 16:9", variable=self._widescreen_var,
+                       command=self._toggle_widescreen, bg=BG_PANEL, fg=FG,
+                       selectcolor=BG, activebackground=BG_PANEL, activeforeground=FG,
+                       font=("Helvetica", 10)).pack(anchor=tk.W, pady=(8, 2))
+        ttk.Label(opts, text="Enable Widescreen",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
+        # Debug
+        debug = ttk.Frame(inner, style="Panel.TFrame")
+        debug.pack(fill=tk.X, padx=8, pady=8)
+        tk.Button(debug, text="Test Dialog (msg 0x66)", command=self._test_dialog,
+                  bg=ACCENT, fg=FG, font=("Helvetica", 10)).pack(anchor=tk.W)
+        tk.Button(debug, text="Dump Message Table", command=self._dump_msg_table,
+                  bg=ACCENT, fg=FG, font=("Helvetica", 10)).pack(anchor=tk.W, pady=(4, 0))
+
+    # --- helpers ---
 
     def _panel(self, parent, title):
         frame = ttk.Frame(parent, style="Panel.TFrame")
@@ -230,7 +281,54 @@ class App:
         self._set(fields, key, "Yes" if val else "No", GREEN if val else FG_DIM)
 
     def _toggle_fast_start(self):
-        self.manager.fast_start = self._fast_start_var.get()
+        val = self._fast_start_var.get()
+        self.manager.fast_start = val
+        settings.set("fast_start", val)
+
+    def _toggle_widescreen(self):
+        val = self._widescreen_var.get()
+        self.manager.widescreen = val
+        settings.set("widescreen", val)
+
+    def _dump_msg_table(self):
+        try:
+            import json, os
+            clsmes = 0x21E94AC0
+            buf_ptr = self.state.mem.read_int(clsmes + 0x21D4)
+            pine_buf = 0x20000000 + buf_ptr
+            count = self.state.mem.read_short(pine_buf)
+            log.info("Dumping %d messages from 0x%08X...", count, buf_ptr)
+
+            messages = {}
+            for i in range(count):
+                msg_id = self.state.mem.read_short(pine_buf + 4 + i * 4)
+                text_off = self.state.mem.read_short(pine_buf + 6 + i * 4)
+                text_addr = pine_buf + (count + text_off + 1) * 2
+                shorts = []
+                for j in range(500):
+                    s = self.state.mem.read_short(text_addr + j * 2)
+                    shorts.append(s)
+                    if s == 0xFF01:
+                        break
+                messages[f"0x{msg_id:04X}"] = {
+                    "entry": i,
+                    "text_offset": text_off,
+                    "raw_shorts": [f"0x{s:04X}" for s in shorts],
+                }
+
+            out = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__)))), "dev-files", "msg-table-dump.json")
+            with open(out, 'w') as f:
+                json.dump(messages, f, indent=2)
+            log.info("Dumped %d messages to %s", count, out)
+        except Exception as e:
+            log.error("Dump failed: %s", e)
+
+    def _test_dialog(self):
+        self.dialog.ask("Do you want a DC2 mod?", callback=self._on_answer)
+
+    def _on_answer(self, choice):
+        self.dialog.show("You chose: " + ("Yes" if choice else "No"), duration=10)
 
     def _on_close(self):
         self.manager.stop_nowait()

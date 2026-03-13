@@ -21,6 +21,7 @@ class ModManager:
         self._ingame = False
         self._mods_started = False
         self.fast_start = False
+        self.widescreen = False
 
         self.all_mods = []
 
@@ -59,19 +60,22 @@ class ModManager:
                 continue
 
             # Set mod flag so PNACH knows we're running
-            self.mem.write_byte(addr.MOD_FLAG, 1)
-            self.mem.write_byte(addr.FAST_START_FLAG, 1 if self.fast_start else 0)
+            self.mem.write_int(addr.MOD_FLAG, 1)
+            self.mem.write_int(addr.FAST_START_FLAG, 1 if self.fast_start else 0)
+            self.mem.write_int(addr.WIDESCREEN_FLAG, 1 if self.widescreen else 0)
 
             loop_no = snap.loop_no
 
             # Detect entering in-game (dungeon or town)
             if not self._ingame and loop_no in (addr.Mode.DUNGEON, addr.Mode.TOWN):
-                time.sleep(0.1)
+                # Wait for load to finish — keep checking until loop stabilizes
+                time.sleep(2)
                 loop_no = self.mem.read_int(addr.LOOP_NO)
+                if loop_no not in (addr.Mode.DUNGEON, addr.Mode.TOWN):
+                    continue  # was transient, not actually in-game yet
 
                 if loop_no == addr.Mode.TOWN and self.mem.read_byte(addr.ENHANCED_MOD_SAVE_FLAG) != 1:
                     # New game — first time entering town, stamp the save
-                    time.sleep(0.5)
                     self.mem.write_byte(addr.ENHANCED_MOD_SAVE_FLAG, 1)
                     log.info("New game detected, set enhanced save flag")
 
@@ -80,9 +84,8 @@ class ModManager:
                     self._start_mods()
                     self._ingame = True
                 else:
-                    log.warning("Not a Reforged save file! Blocking load.")
-                    # Kick back to title
-                    self.mem.write_int(addr.LOOP_NO, addr.Mode.TITLE)
+                    log.warning("Not a Reforged save file — mods disabled for this session.")
+                    self._ingame = True  # mark as in-game so we don't keep checking
 
             # Detect returning to title
             if self._ingame and loop_no in (addr.Mode.TITLE, addr.Mode.EXIT):
@@ -92,7 +95,7 @@ class ModManager:
 
             time.sleep(0.001)
 
-        self.mem.write_byte(addr.MOD_FLAG, 0)
+        self.mem.write_int(addr.MOD_FLAG, 0)
 
     def _start_mods(self):
         if self._mods_started:

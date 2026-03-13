@@ -19,6 +19,7 @@ DC2_GAME_ID = "SCUS-97213"
 
 # --- Core game state ---
 LOOP_NO = 0x20376FCC               # Main game loop state (0=exit, 1=dungeon, 2=town, 3=title)
+NEXT_LOOP_NO = 0x20376FD0          # Next loop to transition to
 NOW_MODE = 0x2037875C               # Sub-mode within current loop (battle mode etc)
 MENU_MODE = 0x20377000              # Menu system state
 PAUSE_FLAG = 0x20377188             # Pause state
@@ -92,6 +93,8 @@ SHOP_MODE_PREV = 0x20377D4C         # Previous shop mode
 PNACH_FLAG = 0x21F70020             # 1 if PNACH active (set by PNACH)
 MOD_FLAG = 0x21F70024               # 1 if Python mod is running (set by mod)
 FAST_START_FLAG = 0x21F70028         # 1 if fast start enabled (set by mod)
+WIDESCREEN_FLAG = 0x21F7002C         # 1 if widescreen enabled (set by mod)
+DIALOG_FLAG = 0x21F70030             # Write message ID here to trigger dialog
 
 # --- Mod flags (in save data — persisted in save file) ---
 # Using unused tail of save data: SaveData + 0x62900 = 0x21E64110
@@ -135,3 +138,28 @@ TOWN_NAMES = {
     4: "Heim Rada",
     5: "Moon Flower Palace",
 }
+
+# --- Gamepad (CGamePad at 0x3D76E0) ---
+GAMEPAD = 0x203D76E0
+GAMEPAD_BUTTONS = 0x203D76E4        # +0x04: current button bitmask
+GAMEPAD_PREV_BUTTONS = 0x203D777C   # +0x9C: previous frame buttons
+GAMEPAD_MENU_LOCK = 0x203D7B3C      # +0x45C: menu mode lock (0=unlocked)
+LOCK_CHARA = 0x2037718C             # LockChara counter (>0 = player frozen)
+
+class Pad:
+    """PS2 gamepad button bitmasks (from CGamePad +0x04)."""
+    TRIANGLE = 0x0010
+    O        = 0x0020
+    X        = 0x0040
+    SQUARE   = 0x0080
+    UP       = 0x1000
+    RIGHT    = 0x2000
+    DOWN     = 0x4000
+    LEFT     = 0x8000
+
+# --- Dialog system ---
+DIALOG_MODE = 0x21F70038            # Window mode for next dialog (0/4=passive, 5=interactive)
+DIALOG_ACTIVE = 0x21F7003C          # 1=dialog showing (managed by cave)
+SYSTEM_MESSAGE_0 = 0x21E94AC0       # ClsMes object for SystemMessage slot 0
+SYS_MES_BUFFER = 0x21E81240         # SysMesBuffer (message table, 365 entries)
+MSG_0x81B1_TEXT = 0x21E87EEE        # Text address for msg 0x81B1 (last entry, safe to overwrite)

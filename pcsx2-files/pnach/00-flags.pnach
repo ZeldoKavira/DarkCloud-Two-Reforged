@@ -1,0 +1,2 @@
+// Mod runtime flags — always active
+patch=1,EE,21F70020,extended,00000001 // PNACH active flag
