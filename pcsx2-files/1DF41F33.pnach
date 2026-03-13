@@ -1,0 +1,211 @@
+gametitle=Dark Cloud 2 [SCUS 97213] (U) [1DF41F33]
+
+// === Mod Runtime Flags ===
+patch=1,EE,21F70020,extended,00000001 // PNACH active flag
+
+// === Block Continue when mod not running ===
+patch=1,EE,E0030000,extended,01F70024
+patch=1,EE,E0020003,extended,00376FCC
+patch=1,EE,E0010002,extended,006FBA40
+patch=1,EE,206FBA40,extended,00000001
+
+patch=1,EE,E0020000,extended,01F70024
+patch=1,EE,E0010002,extended,006FBA44
+patch=1,EE,10377E98,extended,00000001
+
+// === Fast Start ===
+patch=1,EE,E0030001,extended,01F70028
+patch=1,EE,E0020003,extended,00376FCC
+patch=1,EE,E0010000,extended,006FBA40
+patch=1,EE,206FBA40,extended,00000001
+patch=1,EE,E0030001,extended,01F70028
+patch=1,EE,E0020003,extended,00376FCC
+patch=1,EE,E0010000,extended,00377E98
+patch=1,EE,10377E98,extended,00000001
+
+// === Hook control ===
+patch=1,EE,202A0B30,extended,0C0A86D8 // default: original jal TitleModeDraw
+
+// Menu button screen (TitleInfo[0]==1, TitlePhase==1) → message cave
+patch=1,EE,E0020001,extended,006FBA40
+patch=1,EE,E0010001,extended,00377E98
+patch=1,EE,202A0B30,extended,0C7DC040 // jal cave 0x01F70100
+
+// Press Start screen (TitleInfo[0]==1, TitlePhase==0) → title cave
+patch=1,EE,E0020001,extended,006FBA40
+patch=1,EE,E0010000,extended,00377E98
+patch=1,EE,202A0B30,extended,0C7DC080 // jal cave 0x01F70200
+
+// === Code cave at 0x01F70100 ===
+patch=1,EE,21F70100,extended,27BDFFF0 // addiu sp, sp, -16
+patch=1,EE,21F70104,extended,AFBF0000 // sw ra, 0(sp)
+patch=1,EE,21F70108,extended,0C0A86D8 // jal TitleModeDraw
+patch=1,EE,21F7010C,extended,00000000 // nop
+patch=1,EE,21F70110,extended,3C0201F7 // lui v0, 0x01F7
+patch=1,EE,21F70114,extended,8C420024 // lw v0, MOD_FLAG
+patch=1,EE,21F70118,extended,1440002B // bne v0, zero, +43 (skip to end)
+patch=1,EE,21F7011C,extended,00000000 // nop
+// SetColor black (0x80000000)
+patch=1,EE,21F70120,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70124,extended,24848090 // addiu a0, -0x7F70 — CFont
+patch=1,EE,21F70128,extended,3C058000 // lui a1, 0x8000
+patch=1,EE,21F7012C,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F70130,extended,34A50000 // ori a1, 0x0000 (delay) → 0x80000000
+// Shadow line 1
+patch=1,EE,21F70134,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70138,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F7013C,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F70140,extended,34A50080 // ori a1, 0x0080
+patch=1,EE,21F70144,extended,340600BD // li a2, 189
+patch=1,EE,21F70148,extended,3407001A // li a3, 26
+patch=1,EE,21F7014C,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70150,extended,00000000 // nop
+// Shadow line 2
+patch=1,EE,21F70154,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70158,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F7015C,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F70160,extended,34A500A0 // ori a1, 0x00A0
+patch=1,EE,21F70164,extended,3406008D // li a2, 141
+patch=1,EE,21F70168,extended,3407002E // li a3, 46
+patch=1,EE,21F7016C,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70170,extended,00000000 // nop
+// SetColor white (0x80FFFFFF)
+patch=1,EE,21F70174,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70178,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F7017C,extended,3C0580FF // lui a1, 0x80FF
+patch=1,EE,21F70180,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F70184,extended,34A5FFFF // ori a1, 0xFFFF (delay) → 0x80FFFFFF
+// White line 1
+patch=1,EE,21F70188,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F7018C,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70190,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F70194,extended,34A50080 // ori a1, 0x0080
+patch=1,EE,21F70198,extended,340600BC // li a2, 188
+patch=1,EE,21F7019C,extended,34070019 // li a3, 25
+patch=1,EE,21F701A0,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F701A4,extended,00000000 // nop
+// White line 2
+patch=1,EE,21F701A8,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F701AC,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F701B0,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F701B4,extended,34A500A0 // ori a1, 0x00A0
+patch=1,EE,21F701B8,extended,3406008C // li a2, 140
+patch=1,EE,21F701BC,extended,3407002D // li a3, 45
+patch=1,EE,21F701C0,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F701C4,extended,00000000 // nop
+// Epilogue
+patch=1,EE,21F701C8,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F701CC,extended,03E00008 // jr ra
+patch=1,EE,21F701D0,extended,27BD0010 // addiu sp, sp, 16
+
+// === Strings ===
+patch=1,EE,21F70080,extended,6E75614C // "Laun"
+patch=1,EE,21F70084,extended,44206863 // "ch D"
+patch=1,EE,21F70088,extended,52203243 // "C2 R"
+patch=1,EE,21F7008C,extended,726F6665 // "efor"
+patch=1,EE,21F70090,extended,00646567 // "ged\0"
+patch=1,EE,21F700A0,extended,6420726F // "or d"
+patch=1,EE,21F700A4,extended,62617369 // "isab"
+patch=1,EE,21F700A8,extended,6320656C // "le c"
+patch=1,EE,21F700AC,extended,74616568 // "heat"
+patch=1,EE,21F700B0,extended,6F742073 // "s to"
+patch=1,EE,21F700B4,extended,616C7020 // " pla"
+patch=1,EE,21F700B8,extended,61762079 // "y va"
+patch=1,EE,21F700BC,extended,6C6C696E // "nill"
+patch=1,EE,21F700C0,extended,00002E61 // "a.\0\0"
+
+// === Title screen cave at 0x01F70200: "REFORGED" under logo ===
+patch=1,EE,21F70200,extended,27BDFFF0 // prologue
+patch=1,EE,21F70204,extended,AFBF0000
+patch=1,EE,21F70208,extended,0C0A86D8 // jal TitleModeDraw
+patch=1,EE,21F7020C,extended,00000000
+// SetDrawSize(32, 40)
+patch=1,EE,21F70210,extended,3C04003E
+patch=1,EE,21F70214,extended,24848090
+patch=1,EE,21F70218,extended,34050020
+patch=1,EE,21F7021C,extended,0C0B5128
+patch=1,EE,21F70220,extended,34060028
+// SetClearance(32, 28)
+patch=1,EE,21F70224,extended,3C04003E
+patch=1,EE,21F70228,extended,24848090
+patch=1,EE,21F7022C,extended,34050020
+patch=1,EE,21F70230,extended,0C0B512C
+patch=1,EE,21F70234,extended,3406001C
+// SetColor black
+patch=1,EE,21F70238,extended,3C04003E
+patch=1,EE,21F7023C,extended,24848090
+patch=1,EE,21F70240,extended,3C058000
+patch=1,EE,21F70244,extended,0C0B5148
+patch=1,EE,21F70248,extended,34A50000
+// Black outline: up (y-1)
+patch=1,EE,21F7024C,extended,3C04003E
+patch=1,EE,21F70250,extended,24848090
+patch=1,EE,21F70254,extended,3C0501F7
+patch=1,EE,21F70258,extended,34A500D0
+patch=1,EE,21F7025C,extended,3406012C // x=300
+patch=1,EE,21F70260,extended,340700DB // y=219
+patch=1,EE,21F70264,extended,0C0B5688
+patch=1,EE,21F70268,extended,00000000
+// Black outline: down (y+1)
+patch=1,EE,21F7026C,extended,3C04003E
+patch=1,EE,21F70270,extended,24848090
+patch=1,EE,21F70274,extended,3C0501F7
+patch=1,EE,21F70278,extended,34A500D0
+patch=1,EE,21F7027C,extended,3406012C // x=300
+patch=1,EE,21F70280,extended,340700DD // y=221
+patch=1,EE,21F70284,extended,0C0B5688
+patch=1,EE,21F70288,extended,00000000
+// Black outline: left (x-1)
+patch=1,EE,21F7028C,extended,3C04003E
+patch=1,EE,21F70290,extended,24848090
+patch=1,EE,21F70294,extended,3C0501F7
+patch=1,EE,21F70298,extended,34A500D0
+patch=1,EE,21F7029C,extended,3406012B // x=299
+patch=1,EE,21F702A0,extended,340700DC // y=220
+patch=1,EE,21F702A4,extended,0C0B5688
+patch=1,EE,21F702A8,extended,00000000
+// Black outline: right (x+1)
+patch=1,EE,21F702AC,extended,3C04003E
+patch=1,EE,21F702B0,extended,24848090
+patch=1,EE,21F702B4,extended,3C0501F7
+patch=1,EE,21F702B8,extended,34A500D0
+patch=1,EE,21F702BC,extended,3406012D // x=301
+patch=1,EE,21F702C0,extended,340700DC // y=220
+patch=1,EE,21F702C4,extended,0C0B5688
+patch=1,EE,21F702C8,extended,00000000
+// SetColor gold
+patch=1,EE,21F702CC,extended,3C04003E
+patch=1,EE,21F702D0,extended,24848090
+patch=1,EE,21F702D4,extended,3C058020
+patch=1,EE,21F702D8,extended,0C0B5148
+patch=1,EE,21F702DC,extended,34A5A0D0
+// Gold main text
+patch=1,EE,21F702E0,extended,3C04003E
+patch=1,EE,21F702E4,extended,24848090
+patch=1,EE,21F702E8,extended,3C0501F7
+patch=1,EE,21F702EC,extended,34A500D0
+patch=1,EE,21F702F0,extended,3406012C // x=300
+patch=1,EE,21F702F4,extended,340700DC // y=220
+patch=1,EE,21F702F8,extended,0C0B5688
+patch=1,EE,21F702FC,extended,00000000
+// Restore SetDrawSize(16, 20)
+patch=1,EE,21F70300,extended,3C04003E
+patch=1,EE,21F70304,extended,24848090
+patch=1,EE,21F70308,extended,34050010
+patch=1,EE,21F7030C,extended,0C0B5128
+patch=1,EE,21F70310,extended,34060014
+// Restore SetClearance(15, 18)
+patch=1,EE,21F70314,extended,3C04003E
+patch=1,EE,21F70318,extended,24848090
+patch=1,EE,21F7031C,extended,3405000F
+patch=1,EE,21F70320,extended,0C0B512C
+patch=1,EE,21F70324,extended,34060012
+// Epilogue
+patch=1,EE,21F70328,extended,8FBF0000
+patch=1,EE,21F7032C,extended,03E00008
+patch=1,EE,21F70330,extended,27BD0010
+
+// === String: "REFORGED" at 0x01F700D0 ===
+patch=1,EE,21F700D0,extended,4F464552 // "REFO"
+patch=1,EE,21F700D4,extended,44454752 // "RGED"
+patch=1,EE,21F700D8,extended,00000000 // "\0\0\0\0"

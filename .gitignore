@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+/dev-files
+dc2-reforged.json
+
+.DS_Store
+
+.vscode/
+
+scripts/deploy-deck.sh

@@ -1,0 +1,127 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: DC2-Reforged-Windows
+          - os: macos-latest
+            artifact: DC2-Reforged-macOS
+          - os: ubuntu-latest
+            artifact: DC2-Reforged-Linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version string
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+        shell: bash
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller
+        run: pip install -r requirements-build.txt
+
+      - name: Stamp version
+        run: bash scripts/stamp-version.sh "${{ steps.version.outputs.tag }}"
+        shell: bash
+
+      - name: Build executable
+        run: >
+          pyinstaller --onefile --name DC2-Reforged --windowed
+          src/main.py
+        shell: bash
+
+      - name: Zip artifact (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist\* -DestinationPath ${{ matrix.artifact }}-${{ steps.version.outputs.tag }}.zip
+        shell: pwsh
+
+      - name: Zip artifact (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cd dist && zip -r ../${{ matrix.artifact }}-${{ steps.version.outputs.tag }}.zip .
+        shell: bash
+
+      - name: Rename raw binary
+        run: |
+          cd dist
+          for f in DC2-Reforged*; do
+            ext="${f#DC2-Reforged}"
+            mv "$f" "DC2-Reforged-${{ runner.os }}${ext}"
+          done
+        shell: bash
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-${{ steps.version.outputs.tag }}
+          path: ${{ matrix.artifact }}-${{ steps.version.outputs.tag }}.zip
+
+      - name: Upload raw artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-${{ steps.version.outputs.tag }}-raw
+          path: dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+
+  prerelease:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev-${{ github.sha }}
+          name: Pre-release ${{ github.sha }}
+          files: artifacts/**/*
+          prerelease: true
+          generate_release_notes: true
