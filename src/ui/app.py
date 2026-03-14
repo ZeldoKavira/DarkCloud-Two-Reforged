@@ -184,6 +184,20 @@ class App:
         ttk.Label(opts, text="Enable Widescreen",
                   style="Dim.TLabel").pack(anchor=tk.W, padx=20)
 
+        # Run speed
+        speed_row = ttk.Frame(opts, style="Panel.TFrame")
+        speed_row.pack(anchor=tk.W, pady=(8, 2))
+        tk.Label(speed_row, text="Run Speed", bg=BG_PANEL, fg=FG,
+                 font=("Helvetica", 10)).pack(side=tk.LEFT)
+        self._speed_var = tk.StringVar(value=settings.get("run_speed") or "1x (Default)")
+        speed_menu = ttk.Combobox(speed_row, textvariable=self._speed_var,
+                                  values=list(addr.SPEED_OPTIONS.keys()),
+                                  state="readonly", width=14)
+        speed_menu.pack(side=tk.LEFT, padx=(8, 0))
+        speed_menu.bind("<<ComboboxSelected>>", lambda e: self._set_run_speed())
+        ttk.Label(opts, text="Multiply character movement speed",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
         # Debug
         debug = ttk.Frame(inner, style="Panel.TFrame")
         debug.pack(fill=tk.X, padx=8, pady=8)
@@ -230,6 +244,7 @@ class App:
         else:
             self.status_label.config(text=snap.loop_name)
             self.status_dot.config(fg=GREEN)
+            self._apply_run_speed()
 
         emu_names = {0: "Running", 1: "Paused", 2: "Shutdown"}
         self._set(self.conn_fields, "PCSX2", "Connected" if snap.connected else "Disconnected",
@@ -289,6 +304,25 @@ class App:
         val = self._widescreen_var.get()
         self.manager.widescreen = val
         settings.set("widescreen", val)
+
+    def _set_run_speed(self):
+        label = self._speed_var.get()
+        settings.set("run_speed", label)
+        self._apply_run_speed()
+
+    def _apply_run_speed(self):
+        label = self._speed_var.get()
+        upper16 = addr.SPEED_OPTIONS.get(label, 0x40a0)
+        if upper16 == 0x40a0:
+            return  # default, no patch needed
+        instr = addr.speed_lui(upper16)
+        try:
+            cur = self.state.mem.read_int(addr.SPEED_INSTR_MAIN)
+            if cur != instr:
+                self.state.mem.write_int(addr.SPEED_INSTR_MAIN, instr)
+                log.info("Run speed → %s", label)
+        except Exception:
+            pass
 
     def _dump_msg_table(self):
         try:

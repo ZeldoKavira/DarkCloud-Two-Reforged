@@ -157,6 +157,25 @@ class Pad:
     DOWN     = 0x4000
     LEFT     = 0x8000
 
+# --- Run speed ---
+# CharaControl multiplies analog input by frameRate * 5.0
+# The 5.0 is loaded via `lui v0, 0x40a0` at these addresses:
+SPEED_INSTR_MAIN = 0x201a58e0       # CharaControl[0] (town/dungeon)
+SPEED_INSTR_FISH = 0x202f86cc       # CharaControl[1] (fishing area) - TODO: verify
+
+# lui opcode: 0x3C02XXYY where XXYY = upper 16 bits of float
+# Only floats with lower 16 bits == 0 work cleanly
+SPEED_OPTIONS = {
+    "1x (Default)": 0x40a0,   # 5.0
+    "1.5x":         0x40f0,   # 7.5
+    "2x":           0x4120,   # 10.0
+    "3x":           0x4170,   # 15.0
+}
+
+def speed_lui(upper16):
+    """Build the full lui v0, imm instruction word."""
+    return 0x3C020000 | upper16
+
 # --- Dialog system ---
 DIALOG_MODE = 0x21F70038            # Window mode for next dialog (0/4=passive, 5=interactive)
 DIALOG_ACTIVE = 0x21F7003C          # 1=dialog showing (managed by cave)
