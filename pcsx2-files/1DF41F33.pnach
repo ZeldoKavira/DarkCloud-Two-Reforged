@@ -323,3 +323,249 @@ patch=1,EE,21F704FC,extended,8FB00004 // lw s0, 4(sp)
 patch=1,EE,21F70500,extended,8FBF0000 // lw ra, 0(sp)
 patch=1,EE,21F70504,extended,03E00008 // jr ra
 patch=1,EE,21F70508,extended,27BD0030 // addiu sp, 48 (delay)
+
+// ======== 06-hud-overlay ========
+// HUD overlay: draws text lines in top-left during dungeon gameplay
+// HUD_FLAG       (0x01F70040): 1=draw overlay
+// HUD_LINE_COUNT (0x01F70044): number of lines (max 6)
+// HUD_TEXT_BASE  (0x01F70A00): 64 bytes per line, 6 lines max
+//
+// CFont object:  0x003D8090 (global Font)
+// SetDrawSize:   0x002D44A0 (jal 0C0B5128)
+// SetClearance:  0x002D44B0 (jal 0C0B512C)
+// SetColor:      0x002D4520 (jal 0C0B5148)
+// DrawDirect:    0x002D5A20 (jal 0C0B5688)
+//
+// Hook: replace jal DngMainDraw at 0x001CEB70
+// Original: 0C073C24  New: 0C7DC180
+patch=1,EE,201CEB70,extended,0C7DC180 // jal cave 0x01F70600
+// === Code cave at 0x01F70600 ===
+// Prologue (48-byte stack frame for safety)
+patch=1,EE,21F70600,extended,27BDFFD0 // addiu sp, sp, -48
+patch=1,EE,21F70604,extended,AFBF0000 // sw ra, 0(sp)
+patch=1,EE,21F70608,extended,AFB00004 // sw s0, 4(sp)
+patch=1,EE,21F7060C,extended,AFB10008 // sw s1, 8(sp)
+patch=1,EE,21F70610,extended,AFB2000C // sw s2, 12(sp)
+patch=1,EE,21F70614,extended,AFB30010 // sw s3, 16(sp)
+// Call original DngMainDraw
+patch=1,EE,21F70618,extended,0C073C24 // jal DngMainDraw
+patch=1,EE,21F7061C,extended,00000000 // nop
+// Check HUD_FLAG — if 0, skip to epilogue
+patch=1,EE,21F70620,extended,3C0201F7 // lui v0, 0x01F7
+patch=1,EE,21F70624,extended,8C420040 // lw v0, 0x0040(v0)
+patch=1,EE,21F70628,extended,10400038 // beq v0, zero, epilogue (0x70C)
+patch=1,EE,21F7062C,extended,00000000 // nop
+// s1 = line count, s0 = 0 (counter), s2 = text base, s3 = y
+patch=1,EE,21F70630,extended,3C0201F7 // lui v0, 0x01F7
+patch=1,EE,21F70634,extended,8C510044 // lw s1, 0x0044(v0)
+patch=1,EE,21F70638,extended,1A20002A // blez s1, restore (0x6E4)
+patch=1,EE,21F7063C,extended,00008025 // move s0, zero (delay)
+patch=1,EE,21F70640,extended,3C1201F7 // lui s2, 0x01F7
+patch=1,EE,21F70644,extended,36520A00 // ori s2, 0x0A00  s2 = text base
+patch=1,EE,21F70648,extended,3413000A // li s3, 10       s3 = y start
+// SetDrawSize(12, 16)
+patch=1,EE,21F7064C,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70650,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70654,extended,3405000C // li a1, 12
+patch=1,EE,21F70658,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F7065C,extended,34060010 // li a2, 16
+// SetClearance(11, 14)
+patch=1,EE,21F70660,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70664,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70668,extended,3405000B // li a1, 11
+patch=1,EE,21F7066C,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70670,extended,3406000E // li a2, 14
+// === Loop start (0x674) ===
+// SetColor black shadow
+patch=1,EE,21F70674,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70678,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F7067C,extended,3C058000 // lui a1, 0x8000
+patch=1,EE,21F70680,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F70684,extended,00000000 // nop
+// DrawDirect shadow (x=11, y=s3+1)
+patch=1,EE,21F70688,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F7068C,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70690,extended,02402825 // move a1, s2     str ptr
+patch=1,EE,21F70694,extended,3406000B // li a2, 11
+patch=1,EE,21F70698,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F7069C,extended,26670001 // addiu a3, s3, 1 (delay: y+1)
+// SetColor light gray
+patch=1,EE,21F706A0,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F706A4,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F706A8,extended,3C0580E0 // lui a1, 0x80E0
+patch=1,EE,21F706AC,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F706B0,extended,34A5E0E0 // ori a1, 0xE0E0
+// DrawDirect main text (x=10, y=s3)
+patch=1,EE,21F706B4,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F706B8,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F706BC,extended,02402825 // move a1, s2     str ptr
+patch=1,EE,21F706C0,extended,3406000A // li a2, 10
+patch=1,EE,21F706C4,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F706C8,extended,02603825 // move a3, s3     y (delay)
+// s0++, s2 += 64, s3 += 16
+patch=1,EE,21F706CC,extended,26100001 // addiu s0, s0, 1
+patch=1,EE,21F706D0,extended,26520040 // addiu s2, s2, 64
+patch=1,EE,21F706D4,extended,26730010 // addiu s3, s3, 16
+// if s0 < s1, loop
+patch=1,EE,21F706D8,extended,0211082A // slt at, s0, s1
+patch=1,EE,21F706DC,extended,1420FFE5 // bne at, zero, loop_start (0x674)
+patch=1,EE,21F706E0,extended,00000000 // nop
+// === Restore font (0x6E4) ===
+// SetDrawSize(16, 20)
+patch=1,EE,21F706E4,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F706E8,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F706EC,extended,34050010 // li a1, 16
+patch=1,EE,21F706F0,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F706F4,extended,34060014 // li a2, 20
+// SetClearance(15, 18)
+patch=1,EE,21F706F8,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F706FC,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70700,extended,3405000F // li a1, 15
+patch=1,EE,21F70704,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70708,extended,34060012 // li a2, 18
+// === Epilogue (0x70C) ===
+patch=1,EE,21F7070C,extended,8FB30010 // lw s3, 16(sp)
+patch=1,EE,21F70710,extended,8FB2000C // lw s2, 12(sp)
+patch=1,EE,21F70714,extended,8FB10008 // lw s1, 8(sp)
+patch=1,EE,21F70718,extended,8FB00004 // lw s0, 4(sp)
+patch=1,EE,21F7071C,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F70720,extended,03E00008 // jr ra
+patch=1,EE,21F70724,extended,27BD0030 // addiu sp, sp, 48 (delay)
+
+// ======== 07-dungeon-speed ========
+// Dungeon speed multiplier: scales velocity before CollisionCheck
+// Python patches the lui at 0x21F70780 to change the multiplier.
+// Default: lui v0, 0x3F80 (1.0 = no change)
+//
+// Hook CollisionCheck call in RunScript
+patch=1,EE,20171438,extended,0C7DC1E0 // jal cave 0x01F70780
+// === Code cave at 0x01F70780 ===
+// Load multiplier via lui+mtc1 (Python patches the lui immediate)
+patch=1,EE,21F70780,extended,3C023F80 // lui v0, 0x3F80  (1.0 default, patched by Python)
+patch=1,EE,21F70784,extended,44820000 // mtc1 v0, f0
+// Scale vx
+patch=1,EE,21F70788,extended,C4C10000 // lwc1 f1, 0(a2)
+patch=1,EE,21F7078C,extended,46000842 // mul.S f1, f1, f0
+patch=1,EE,21F70790,extended,E4C10000 // swc1 f1, 0(a2)
+// Scale vz
+patch=1,EE,21F70794,extended,C4C10008 // lwc1 f1, 8(a2)
+patch=1,EE,21F70798,extended,46000842 // mul.S f1, f1, f0
+patch=1,EE,21F7079C,extended,E4C10008 // swc1 f1, 8(a2)
+// Tail-call CollisionCheck
+patch=1,EE,21F707A0,extended,0805B11C // j CollisionCheck
+patch=1,EE,21F707A4,extended,00000000 // nop
+
+// ======== 09-auto-repair ========
+// Auto Repair Powder — intercepts weapon break to auto-consume repair powder
+// AUTO_REPAIR_FLAG  (0x01F70048): 1=enabled, set by Python (NOT by PNACH — no init here)
+// REPAIR_CONSUMED   (0x01F7004C): written by cave: 1=melee consumed, 2=ranged consumed
+//
+// Hooks jal AddAbsRate in calcWeaponParamWhp (melee) and calcWeaponParam2 (ranged).
+// Cave at 0x01F70B00
+// === Hooks: replace jal AddAbsRate in both functions ===
+patch=1,EE,201E87B4,extended,0C7DC2C0 // melee: jal cave (was jal AddAbsRate)
+patch=1,EE,201E8948,extended,0C7DC2C0 // ranged: jal cave (was jal AddAbsRate)
+// === Code cave at 0x01F70B00 ===
+// Entry: a0=battleCharaInfo, a1=slot, a2=0, f12=rate, ra=return addr
+//
+// We must NOT clobber a0/a1/a2/f12 before potentially calling AddAbsRate.
+// Use at (r1) for flag check since it's the assembler temp register.
+// 0x00: lui at, 0x01F7
+patch=1,EE,21F70B00,extended,3C0101F7
+// 0x04: lw at, 0x0048(at)  → at = AUTO_REPAIR_FLAG
+patch=1,EE,21F70B04,extended,8C210048
+// 0x08: bne at, zero, repair (offset=4 → delay@0x0C + 4*4 = 0x1C)
+patch=1,EE,21F70B08,extended,14200004
+// 0x0C: nop (delay)
+patch=1,EE,21F70B0C,extended,00000000
+// --- Flag not set: call original AddAbsRate, return ---
+// 0x10: j AddAbsRate (0x0019FEE0)  — tail call, reuses our ra
+patch=1,EE,21F70B10,extended,08067FB8
+// 0x14: nop (delay)
+patch=1,EE,21F70B14,extended,00000000
+// --- padding ---
+// 0x18: nop
+patch=1,EE,21F70B18,extended,00000000
+// --- repair: (0x1C) restore WHP to max, signal Python, skip AddAbsRate ---
+// Save ra and a1
+// 0x1C: addiu sp, sp, -16
+patch=1,EE,21F70B1C,extended,27BDFFF0
+// 0x20: sw ra, 12(sp)
+patch=1,EE,21F70B20,extended,AFBF000C
+// 0x24: sw a1, 8(sp)
+patch=1,EE,21F70B24,extended,AFA50008
+// a0=battleCharaInfo, a1=slot — call GetNowAccessWHp
+// 0x28: jal GetNowAccessWHp (0x0019F890)
+patch=1,EE,21F70B28,extended,0C067E24
+// 0x2C: nop (delay)
+patch=1,EE,21F70B2C,extended,00000000
+// v0 = COMMON_GAGE ptr. If null, skip.
+// 0x30: beq v0, zero, done (offset=5 → delay@0x34 + 5*4 = 0x48)
+patch=1,EE,21F70B30,extended,10400005
+// 0x34: nop (delay)
+patch=1,EE,21F70B34,extended,00000000
+// Write current = max
+// 0x38: lwc1 f0, 0(v0)   ; f0 = max
+patch=1,EE,21F70B38,extended,C4400000
+// 0x3C: swc1 f0, 4(v0)   ; current = max
+patch=1,EE,21F70B3C,extended,E4400004
+// REPAIR_CONSUMED = slot + 1
+// 0x40: lw a1, 8(sp)
+patch=1,EE,21F70B40,extended,8FA50008
+// 0x44: addiu a1, a1, 1
+patch=1,EE,21F70B44,extended,24A50001
+// 0x48: lui at, 0x01F7
+patch=1,EE,21F70B48,extended,3C0101F7
+// 0x4C: sw a1, 0x004C(at)
+patch=1,EE,21F70B4C,extended,AC25004C
+// done: restore and return (AddAbsRate skipped)
+// 0x50: lw ra, 12(sp)
+patch=1,EE,21F70B50,extended,8FBF000C
+// 0x54: jr ra
+patch=1,EE,21F70B54,extended,03E00008
+// 0x58: addiu sp, sp, 16 (delay)
+patch=1,EE,21F70B58,extended,27BD0010
+
+// ======== 10-cursor-fix ========
+// Hook after SetWakuWH to fix cursor + rect position + rect size
+// Hooks GetEtcTblValue call at 0x002C1F48 (runs after SetWakuWH)
+// Python writes to 0x01F70B60-0x01F70B78
+// Hook
+patch=1,EE,202C1F48,extended,0C7DC2E0
+// === Cave at 0x01F70B80 ===
+patch=1,EE,21F70B80,extended,27BDFFE0 // addiu sp, -32
+patch=1,EE,21F70B84,extended,AFBF0000 // sw ra, 0(sp)
+// Call original GetEtcTblValue — a0-a3 set by caller + delay slot
+patch=1,EE,21F70B88,extended,0C08AAEC // jal GetEtcTblValue (0x0022ABB0)
+patch=1,EE,21F70B8C,extended,00000000 // nop
+// Check flag
+patch=1,EE,21F70B90,extended,3C0201F7 // lui v0, 0x01F7
+patch=1,EE,21F70B94,extended,8C430B60 // lw v1, 0x0B60(v0) — cursor X (0=skip)
+// beq v1, zero, epilogue (0xBDC). offset=(BDC-B9C)/4=16
+patch=1,EE,21F70B98,extended,10600010
+patch=1,EE,21F70B9C,extended,00000000 // nop
+// Load targets
+patch=1,EE,21F70BA0,extended,8C440B64 // cursor Y
+patch=1,EE,21F70BA4,extended,8C450B68 // rect X
+patch=1,EE,21F70BA8,extended,8C460B6C // rect Y
+patch=1,EE,21F70BAC,extended,8C470B70 // rect part addr
+patch=1,EE,21F70BB0,extended,8C480B74 // rect width
+patch=1,EE,21F70BB4,extended,8C490B78 // rect height
+// Load MenuCommonInfo
+patch=1,EE,21F70BB8,extended,8F8294F8 // lw v0, -0x6B08(gp)
+// Load form pointers
+patch=1,EE,21F70BBC,extended,8C4A0138 // lw t2, 0x138(v0) — cursor form
+patch=1,EE,21F70BC0,extended,8C4B013C // lw t3, 0x13C(v0) — rect form
+// Write cursor pos
+patch=1,EE,21F70BC4,extended,AD43000C // sw v1, 0x0C(t2)
+patch=1,EE,21F70BC8,extended,AD440010 // sw a0, 0x10(t2)
+// Write rect pos
+patch=1,EE,21F70BCC,extended,AD65000C // sw a1, 0x0C(t3)
+patch=1,EE,21F70BD0,extended,AD660010 // sw a2, 0x10(t3)
+// Write rect part size
+patch=1,EE,21F70BD4,extended,ACE80024 // sw t0, 0x24(a3) — width
+patch=1,EE,21F70BD8,extended,ACE90028 // sw t1, 0x28(a3) — height
+// Epilogue (0xBDC)
+patch=1,EE,21F70BDC,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F70BE0,extended,03E00008 // jr ra
+patch=1,EE,21F70BE4,extended,27BD0020 // addiu sp, 32

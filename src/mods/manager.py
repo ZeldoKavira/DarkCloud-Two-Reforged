@@ -6,6 +6,7 @@ import time
 from core.memory import Memory
 from game.game_state import GameState, GameSnapshot
 from game import addresses as addr
+from game.hud import write_hud
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +23,8 @@ class ModManager:
         self._mods_started = False
         self.fast_start = False
         self.widescreen = False
+        self.auto_repair = False
+        self.on_options_loaded = None  # callback(speed_label, pickup_label, map_label, map_tgt_label)
 
         self.all_mods = []
 
@@ -81,6 +84,7 @@ class ModManager:
 
                 if self.mem.read_byte(addr.ENHANCED_MOD_SAVE_FLAG) == 1:
                     log.info("Entering in-game (loop=%d), starting mods", loop_no)
+                    self._apply_saved_options()
                     self._start_mods()
                     self._ingame = True
                 else:
@@ -92,6 +96,21 @@ class ModManager:
                 log.info("Returned to title/exit")
                 self._stop_mods()
                 self._ingame = False
+
+            # Update HUD overlay
+            if self._ingame:
+                try:
+                    write_hud(self.mem, loop_no)
+                except Exception as e:
+                    log.error("HUD error: %s", e)
+                try:
+                    self._debug_event_dialog()
+                except Exception:
+                    pass
+                try:
+                    self._auto_repair_tick()
+                except Exception:
+                    pass
 
             time.sleep(0.001)
 
@@ -109,3 +128,90 @@ class ModManager:
             mod.stop()
         self._mods_started = False
         self._ingame = False
+
+    def _debug_event_dialog(self):
+        """Auto-dismiss the Magic Crystal chest dialog (msg 0x8CA)."""
+        scene_ptr = self.mem.read_int(addr.DNG_MAIN_SCENE)
+        if scene_ptr == 0:
+            return
+        pine_scene = 0x20000000 + scene_ptr
+        clsmes_ptr = self.mem.read_int(pine_scene + addr._SCENE_MSG_CLSMES_OFFSET)
+        if clsmes_ptr == 0:
+            return
+        pine_cls = 0x20000000 + clsmes_ptr
+        msg_id = self.mem.read_int(pine_cls + 0x17E4)
+        if msg_id == 0x8CA:
+            self.mem.write_int(pine_cls + 0x17E4, -1)
+            log.info("Auto-dismissed Magic Crystal dialog")
+
+    def _apply_saved_options(self):
+        """Read saved option bytes and sync UI dropdowns."""
+        speed_keys = list(addr.SPEED_OPTIONS.keys())
+        dng_speed_keys = list(addr.SPEED_DNG_OPTIONS.keys())
+        pickup_keys = list(addr.PICKUP_RADIUS_OPTIONS.keys())
+        map_keys = list(addr.MINIMAP_POS_OPTIONS.keys())
+
+        speed_idx = self.mem.read_byte(addr.OPTION_SAVE_RUN_SPEED)
+        dng_speed_idx = self.mem.read_byte(addr.OPTION_SAVE_DNG_SPEED)
+        pickup_idx = self.mem.read_byte(addr.OPTION_SAVE_PICKUP_RADIUS)
+        map_idx = self.mem.read_byte(addr.OPTION_SAVE_MAP_POS)
+        map_tgt_idx = self.mem.read_byte(addr.OPTION_SAVE_MAP_POS_TARGET)
+
+        speed_label = speed_keys[speed_idx] if speed_idx < len(speed_keys) else speed_keys[0]
+        dng_speed_label = dng_speed_keys[dng_speed_idx] if dng_speed_idx < len(dng_speed_keys) else dng_speed_keys[0]
+        pickup_label = pickup_keys[pickup_idx] if pickup_idx < len(pickup_keys) else pickup_keys[0]
+        map_label = map_keys[map_idx] if map_idx < len(map_keys) else map_keys[0]
+        map_tgt_label = map_keys[map_tgt_idx] if map_tgt_idx < len(map_keys) else map_keys[0]
+
+        log.info("Loaded saved options — town_speed=%s, dng_speed=%s, pickup=%s, map=%s, map_target=%s",
+                 speed_label, dng_speed_label, pickup_label, map_label, map_tgt_label)
+        if self.on_options_loaded:
+            self.on_options_loaded(speed_label, pickup_label, map_label, map_tgt_label, dng_speed_label)
+
+    def _auto_repair_tick(self):
+        """Check if PNACH cave consumed a repair powder, then update inventory."""
+        if not self.auto_repair:
+            self.mem.write_int(addr.AUTO_REPAIR_FLAG, 0)
+            return
+
+        # Check if cave signaled a consumption
+        consumed = self.mem.read_int(addr.REPAIR_CONSUMED)
+        if consumed != 0:
+            self.mem.write_int(addr.REPAIR_CONSUMED, 0)
+            item_id = addr.REPAIR_POWDER_MELEE if consumed == 1 else addr.REPAIR_POWDER_RANGED
+            slot_name = "melee" if consumed == 1 else "ranged"
+            if self._consume_item(item_id):
+                log.info("Auto-used Repair Powder (%s)", slot_name)
+            else:
+                log.warning("Repair powder consumed but item not found in inventory!")
+
+        # Scan inventory for any repair powder and set/clear the flag
+        has_melee = self._find_item(addr.REPAIR_POWDER_MELEE) is not None
+        has_ranged = self._find_item(addr.REPAIR_POWDER_RANGED) is not None
+        self.mem.write_int(addr.AUTO_REPAIR_FLAG, 1 if (has_melee or has_ranged) else 0)
+
+    def _find_item(self, item_id):
+        """Find inventory slot address containing item_id, or None."""
+        base = addr.USER_DATA_MANAGER
+        for i in range(addr.INVENTORY_SLOT_COUNT):
+            slot = base + i * addr.INVENTORY_SLOT_SIZE
+            iid = self.mem.read_short(slot + 2)
+            if iid == item_id:
+                count = self.mem.read_short(slot + 0x10)
+                if count > 0:
+                    return slot
+        return None
+
+    def _consume_item(self, item_id):
+        """Decrement count of item_id in inventory. Returns True if successful."""
+        slot = self._find_item(item_id)
+        if slot is None:
+            return False
+        count = self.mem.read_short(slot + 0x10)
+        if count <= 1:
+            # Last one — zero out the entire slot
+            for off in range(0, addr.INVENTORY_SLOT_SIZE, 4):
+                self.mem.write_int(slot + off, 0)
+        else:
+            self.mem.write_short(slot + 0x10, count - 1)
+        return True

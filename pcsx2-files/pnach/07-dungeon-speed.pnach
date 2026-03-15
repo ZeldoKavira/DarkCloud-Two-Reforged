@@ -1,0 +1,25 @@
+// Dungeon speed multiplier: scales velocity before CollisionCheck
+// Python patches the lui at 0x21F70780 to change the multiplier.
+// Default: lui v0, 0x3F80 (1.0 = no change)
+//
+// Hook CollisionCheck call in RunScript
+patch=1,EE,20171438,extended,0C7DC1E0 // jal cave 0x01F70780
+
+// === Code cave at 0x01F70780 ===
+// Load multiplier via lui+mtc1 (Python patches the lui immediate)
+patch=1,EE,21F70780,extended,3C023F80 // lui v0, 0x3F80  (1.0 default, patched by Python)
+patch=1,EE,21F70784,extended,44820000 // mtc1 v0, f0
+
+// Scale vx
+patch=1,EE,21F70788,extended,C4C10000 // lwc1 f1, 0(a2)
+patch=1,EE,21F7078C,extended,46000842 // mul.S f1, f1, f0
+patch=1,EE,21F70790,extended,E4C10000 // swc1 f1, 0(a2)
+
+// Scale vz
+patch=1,EE,21F70794,extended,C4C10008 // lwc1 f1, 8(a2)
+patch=1,EE,21F70798,extended,46000842 // mul.S f1, f1, f0
+patch=1,EE,21F7079C,extended,E4C10008 // swc1 f1, 8(a2)
+
+// Tail-call CollisionCheck
+patch=1,EE,21F707A0,extended,0805B11C // j CollisionCheck
+patch=1,EE,21F707A4,extended,00000000 // nop

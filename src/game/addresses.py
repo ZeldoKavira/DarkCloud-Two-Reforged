@@ -102,7 +102,12 @@ DIALOG_FLAG = 0x21F70030             # Write message ID here to trigger dialog
 _MOD_SAVE_BASE = 0x21E64110
 ENHANCED_MOD_SAVE_FLAG = _MOD_SAVE_BASE + 0x00   # 1 = Reforged save file
 MOD_SAVE_VERSION = _MOD_SAVE_BASE + 0x01         # Mod version byte
-# Reserve _MOD_SAVE_BASE + 0x02 through +0xFF for future mod options
+OPTION_SAVE_RUN_SPEED = _MOD_SAVE_BASE + 0x02    # Index into SPEED_OPTIONS (town)
+OPTION_SAVE_PICKUP_RADIUS = _MOD_SAVE_BASE + 0x03  # Index into PICKUP_RADIUS_OPTIONS
+OPTION_SAVE_MAP_POS = _MOD_SAVE_BASE + 0x04        # Index into MINIMAP_POS_OPTIONS
+OPTION_SAVE_MAP_POS_TARGET = _MOD_SAVE_BASE + 0x05 # Index into MINIMAP_POS_OPTIONS (when targeting)
+OPTION_SAVE_DNG_SPEED = _MOD_SAVE_BASE + 0x06      # Index into SPEED_DNG_OPTIONS
+# Reserve _MOD_SAVE_BASE + 0x07 through +0xFF for future mod options
 
 # --- Title screen ---
 TITLE_INFO_PTR = 0x20377E6C         # Pointer to TitleInfo struct
@@ -158,23 +163,87 @@ class Pad:
     LEFT     = 0x8000
 
 # --- Run speed ---
-# CharaControl multiplies analog input by frameRate * 5.0
-# The 5.0 is loaded via `lui v0, 0x40a0` at these addresses:
-SPEED_INSTR_MAIN = 0x201a58e0       # CharaControl[0] (town/dungeon)
-SPEED_INSTR_FISH = 0x202f86cc       # CharaControl[1] (fishing area) - TODO: verify
+# Town: CharaControl multiplies analog input by frameRate * 5.0
+# The 5.0 is loaded via `lui` at these addresses:
+SPEED_INSTR_MAIN = 0x201a58e0       # CharaControl (town) — lui v0, 0x40a0
+# TODO: Dungeon speed uses a different movement system (LoopMode==0).
+# Tried: patching 0x20314B00 (wrong function), action_info+0x794 (script speed, no effect).
+# The dungeon character movement is driven by CActionChara::RunScript → CollisionCheck.
+# Solution: PNACH cave hooks CollisionCheck to scale velocity. Python patches lui instruction.
+SPEED_INSTR_DNG = 0x21F70780        # lui v0, imm in dungeon speed cave (patched by Python)
+
+SPEED_DNG_OPTIONS = {
+    "1x (Default)": 0x3F80,   # 1.0
+    "1.5x":         0x3FC0,   # 1.5
+    "1.75x":        0x3FE0,   # 1.75
+    "2x":           0x4000,   # 2.0
+    "2.25x":        0x4010,   # 2.25
+    "2.5x":         0x4020,   # 2.5
+    "2.75x":        0x4030,   # 2.75
+    "3x":           0x4040,   # 3.0
+}
 
 # lui opcode: 0x3C02XXYY where XXYY = upper 16 bits of float
 # Only floats with lower 16 bits == 0 work cleanly
 SPEED_OPTIONS = {
     "1x (Default)": 0x40a0,   # 5.0
     "1.5x":         0x40f0,   # 7.5
+    "1.75x":        0x410c,   # 8.75
     "2x":           0x4120,   # 10.0
+    "2.25x":        0x4134,   # 11.25
+    "2.5x":         0x4148,   # 12.5
+    "2.75x":        0x415c,   # 13.75
     "3x":           0x4170,   # 15.0
 }
 
 def speed_lui(upper16):
-    """Build the full lui v0, imm instruction word."""
+    """Build the full lui v0, imm instruction word (town)."""
     return 0x3C020000 | upper16
+
+# --- Pickup radius ---
+# IsGet__9CPullItemFPf compares distance < field_0x5c * 20.0
+# The 20.0 is loaded via `lui v1, 0x41a0` at this address:
+PICKUP_RADIUS_INSTR = 0x201b9144
+
+PICKUP_RADIUS_OPTIONS = {
+    "1x (Default)": 0x41a0,   # 20.0
+    "2x":           0x4220,   # 40.0
+    "3x":           0x4270,   # 60.0
+    "5x":           0x42c8,   # 100.0
+}
+
+def pickup_radius_lui(upper16):
+    """Build the full lui v1, imm instruction word."""
+    return 0x3C030000 | upper16
+
+# --- Large map position ---
+# Mode 2 (large map) X/Y are set by `li` instructions before Draw__14CMiniMapSymbolFPf.
+# Three call sites write these values every frame. We patch the `li` immediate.
+# Format: addiu reg, zero, imm16 → 0x2402XXYY (v0) or 0x2403XXYY (v1)
+# Site 1: main dungeon draw
+MINIMAP_LG_X1 = 0x201D0360   # li v0, 0x150  (X)
+MINIMAP_LG_Y1 = 0x201D036C   # li v1, 0xd4   (Y)
+# Site 2: Sphida draw (different defaults: X=0x100, Y=0xe6)
+MINIMAP_LG_X2 = 0x202EB864   # li v1, 0x100  (X)
+MINIMAP_LG_Y2 = 0x202EB870   # li v0, 0xe6   (Y)
+# Site 3: other dungeon draw
+MINIMAP_LG_X3 = 0x202EBB84   # li v0, 0x150  (X)
+MINIMAP_LG_Y3 = 0x202EBB90   # li v1, 0xd4   (Y)
+
+# Default large map: X=0x150(336), Y=0xD4(212), W=0x140(320), H=0x118(280)
+# Screen is 512x448. Map center (X,Y) with scissor at (X-W/2, Y-H/2).
+# Options shift X,Y to reposition. Sphida offsets are adjusted proportionally.
+MINIMAP_POS_OPTIONS = {
+    "Center (Default)": (0x150, 0xD4, 0x100, 0xE6),  # (site1/3 X, site1/3 Y, site2 X, site2 Y)
+    "Top-Right":        (0x1C0, 0x8C, 0x170, 0x9E),
+    "Top-Left":         (0xA0,  0x8C, 0x050, 0x9E),
+    "Center-Right":     (0x1F0, 0xD4, 0x1A0, 0xE6),
+    "Bottom-Right":     (0x1C0, 0x118, 0x170, 0x12A),
+}
+
+# --- Lock-on targeting ---
+# MainChara is a pointer; *(MainChara) + 0x772 is a short: 0 = not locked on, non-zero = locked on
+LOCKON_OFFSET = 0x772
 
 # --- Dialog system ---
 DIALOG_MODE = 0x21F70038            # Window mode for next dialog (0/4=passive, 5=interactive)
@@ -182,3 +251,32 @@ DIALOG_ACTIVE = 0x21F7003C          # 1=dialog showing (managed by cave)
 SYSTEM_MESSAGE_0 = 0x21E94AC0       # ClsMes object for SystemMessage slot 0
 SYS_MES_BUFFER = 0x21E81240         # SysMesBuffer (message table, 365 entries)
 MSG_0x81B1_TEXT = 0x21E87EEE        # Text address for msg 0x81B1 (last entry, safe to overwrite)
+
+# --- HUD overlay ---
+HUD_FLAG = 0x21F70040               # 1=draw HUD overlay (set by Python)
+HUD_LINE_COUNT = 0x21F70044         # Number of lines to draw (max 6)
+
+# --- Auto repair powder ---
+AUTO_REPAIR_FLAG = 0x21F70048       # 1=auto-repair enabled (set by Python)
+REPAIR_CONSUMED = 0x21F7004C        # Set by PNACH cave: 1=melee powder used, 2=ranged powder used
+
+# Inventory: UserDataManager = SaveData + 0x1D2A0 = 0x21E1EAB0
+# 150 slots of 0x6C bytes. Per slot: +0x00=type(short), +0x02=itemID(short), +0x10=count(short)
+USER_DATA_MANAGER = 0x21E1EAB0
+INVENTORY_SLOT_SIZE = 0x6C
+INVENTORY_SLOT_COUNT = 150
+
+# Repair powder item IDs (from GetEnableRepairItemNo)
+REPAIR_POWDER_MELEE = 0x126         # Repair Powder (weapon sub-types 1,3,0xD)
+REPAIR_POWDER_RANGED = 0x12A        # Gun Repair Powder (weapon sub-type 2)
+HUD_TEXT_BASE = 0x21F70A00          # Text lines, 64 bytes each (6 lines max)
+HUD_LINE_LEN = 64                   # Max bytes per line (including null)
+
+# Floor info pointers (set by game when on a dungeon floor)
+DNG_INFO_FLOOR_INFO = 0x203773C0    # Ptr to current floor save data (medal flags etc)
+DNG_INFO_ROOM_INFO = 0x203773C4     # Ptr to current floor static data (requirements)
+
+# --- Dungeon scene ---
+DNG_MAIN_SCENE = 0x2037729C         # Pointer to DngMainScene (CScene)
+# Event ClsMes: *(DngMainScene + 0x2240)  (GetSceneMessage(scene,0) + 0x34)
+_SCENE_MSG_CLSMES_OFFSET = 0x2240   # scene + 0x220C + 0x34

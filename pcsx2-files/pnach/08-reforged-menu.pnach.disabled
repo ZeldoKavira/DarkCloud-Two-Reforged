@@ -1,0 +1,106 @@
+// Custom "Reforged" menu page — slot 9 in menu function tables
+// Key handler at 0x01F70800, Draw handler at 0x01F70900
+// String data at 0x01F70A00
+
+// === Wire slot 9 into function tables (PNACH writes these every frame) ===
+patch=1,EE,20350924,extended,01F70800 // keyfunctbl[9] = key handler cave
+patch=1,EE,203509A4,extended,01F70900 // drawfunctbl[9] = draw handler cave
+
+// === Strings ===
+// "Reforged Settings" at 0x01F70A00
+patch=1,EE,21F70A00,extended,6F666552 // "Refo"
+patch=1,EE,21F70A04,extended,64656772 // "rged"
+patch=1,EE,21F70A08,extended,74655320 // " Set"
+patch=1,EE,21F70A0C,extended,676E6974 // "ting"
+patch=1,EE,21F70A10,extended,00000073 // "s\0"
+
+// "Run Speed" at 0x01F70A20
+patch=1,EE,21F70A20,extended,206E7552 // "Run "
+patch=1,EE,21F70A24,extended,65657053 // "Spee"
+patch=1,EE,21F70A28,extended,00000064 // "d\0"
+
+// === Draw handler at 0x01F70900 ===
+// Just return immediately — test if page 9 dispatch works without crashing
+patch=1,EE,21F70900,extended,03E00008 // jr ra
+patch=1,EE,21F70904,extended,00000000 // nop
+
+// SetDrawSize(font, 20, 20)
+patch=1,EE,21F70908,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F7090C,extended,24848090 // addiu a0, -0x7F70  (0x003D8090 = CFont)
+patch=1,EE,21F70910,extended,34050014 // li a1, 20
+patch=1,EE,21F70914,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F70918,extended,34060014 // li a2, 20 (delay)
+
+// SetColor(font, 0x8000D4FF) — gold ABGR
+patch=1,EE,21F7091C,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70920,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70924,extended,3C058000 // lui a1, 0x8000
+patch=1,EE,21F70928,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F7092C,extended,34A5D4FF // ori a1, 0xD4FF (delay)
+
+// DrawDirect(font, "Reforged Settings", 140, 50)
+patch=1,EE,21F70930,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70934,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70938,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F7093C,extended,24A50A00 // addiu a1, 0x0A00
+patch=1,EE,21F70940,extended,3406008C // li a2, 140
+patch=1,EE,21F70944,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70948,extended,34070032 // li a3, 50 (delay)
+
+// SetDrawSize(font, 14, 14)
+patch=1,EE,21F7094C,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70950,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70954,extended,3405000E // li a1, 14
+patch=1,EE,21F70958,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F7095C,extended,3406000E // li a2, 14 (delay)
+
+// SetColor(font, 0x80E0E0E0) — white
+patch=1,EE,21F70960,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70964,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70968,extended,3C0580E0 // lui a1, 0x80E0
+patch=1,EE,21F7096C,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F70970,extended,34A5E0E0 // ori a1, 0xE0E0 (delay)
+
+// DrawDirect(font, "Run Speed", 80, 100)
+patch=1,EE,21F70974,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70978,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F7097C,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F70980,extended,24A50A20 // addiu a1, 0x0A20
+patch=1,EE,21F70984,extended,34060050 // li a2, 80
+patch=1,EE,21F70988,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F7098C,extended,34070064 // li a3, 100 (delay)
+
+// Epilogue
+patch=1,EE,21F70990,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F70994,extended,03E00008 // jr ra
+patch=1,EE,21F70998,extended,27BD0010 // addiu sp, sp, 16 (delay)
+
+// === Key handler at 0x01F70800 ===
+// Prologue
+patch=1,EE,21F70800,extended,27BDFFF0 // addiu sp, sp, -16
+patch=1,EE,21F70804,extended,AFBF0000 // sw ra, 0(sp)
+
+// GetCommonMenuModeID() → v0
+patch=1,EE,21F70808,extended,0C08D208 // jal GetCommonMenuModeID (0x00234820)
+patch=1,EE,21F7080C,extended,00000000 // nop
+patch=1,EE,21F70810,extended,00402825 // move a1, v0
+
+// StepMainMenuIconMove(MenuPosData, modeIDs, 9, 2)
+// MenuPosData ptr at 0x00377940
+patch=1,EE,21F70814,extended,3C040037 // lui a0, 0x0037
+patch=1,EE,21F70818,extended,8C847940 // lw a0, 0x7940(a0)
+patch=1,EE,21F7081C,extended,34060009 // li a2, 9
+patch=1,EE,21F70820,extended,0C08AD64 // jal StepMainMenuIconMove (0x0022B590)
+patch=1,EE,21F70824,extended,34070002 // li a3, 2 (delay)
+
+// CheckSelectKey(MenuCommonInfo)
+// MenuCommonInfo ptr at 0x003779E8
+patch=1,EE,21F70828,extended,3C040037 // lui a0, 0x0037
+patch=1,EE,21F7082C,extended,0C08F80C // jal CheckSelectKey (0x0023E030)
+patch=1,EE,21F70830,extended,8C8479E8 // lw a0, 0x79E8(a0) (delay)
+
+// return 0
+patch=1,EE,21F70834,extended,00001025 // move v0, zero
+patch=1,EE,21F70838,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F7083C,extended,03E00008 // jr ra
+patch=1,EE,21F70840,extended,27BD0010 // addiu sp, sp, 16 (delay)

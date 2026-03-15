@@ -1,0 +1,45 @@
+// Skip Magic Crystal dialog (msg 0x8CA)
+// When MakeMesWin is called with msg 0x8CA, change it to -1 (instant dismiss)
+// Uses conditional patch: only active when PNACH_FLAG is set
+
+// If PNACH active AND MakeMesWin's 2nd arg (at call site) == 0x8CA, replace with -1
+// MakeMesWin stores param_2 (msg_id) into s0 at 0x00158B30: move s0, a1
+// Then checks s0 < 0 at 0x00158B34: bgez s0, ...
+// We patch right after the function prologue stores s0=a1:
+// At 0x00158B30 the instruction is: move s0, a1 (0x2D80A000)
+// We can't easily conditional-patch mid-function.
+
+// Simpler: use E-type conditional to patch the msg_id comparison.
+// When s0 (stored at MakeMesWin+0x17E4) equals 0x8CA, force it to -1.
+// 
+// Actually simplest: just patch the stored value every frame.
+// If *(0x01F70020) == 1 (PNACH active)
+//   AND the event ClsMes msg_id == 0x8CA
+//   → write -1 to dismiss
+
+// But we don't know the ClsMes pointer statically...
+
+// OK truly simplest: conditional patch on the PNACH flag,
+// NOP the two instructions that create the window for msg 0x8CA.
+// The problem is it's called from bytecode via _MES_MAKE, not a fixed callsite.
+
+// Let's just do the hook properly but ONLY via PNACH conditionals:
+// If PNACH_FLAG == 1, patch MakeMesWin entry to jump to cave
+patch=1,EE,E0010001,extended,01F70020
+patch=1,EE,20158B20,extended,087DC300 // j 0x01F70C00
+// If PNACH_FLAG == 1, patch delay slot
+patch=1,EE,E0010001,extended,01F70020
+patch=1,EE,20158B24,extended,00000000 // nop
+
+// === Code cave at 0x01F70C00 ===
+patch=1,EE,21F70C00,extended,340208CA // ori v0, zero, 0x8CA
+patch=1,EE,21F70C04,extended,10A20005 // beq a1, v0, skip (+5 → 0x0C1C)
+patch=1,EE,21F70C08,extended,00000000 // nop
+// not blocked: run original prologue, jump back
+patch=1,EE,21F70C0C,extended,D0FFBD27 // addiu sp, sp, -0x30
+patch=1,EE,21F70C10,extended,2000BFFF // sd ra, 0x20(sp)
+patch=1,EE,21F70C14,extended,080562CA // j 0x00158B28
+patch=1,EE,21F70C18,extended,00000000 // nop
+// skip: return immediately
+patch=1,EE,21F70C1C,extended,0800E003 // jr ra
+patch=1,EE,21F70C20,extended,00000000 // nop

@@ -1,0 +1,80 @@
+// Auto Repair Powder — intercepts weapon break to auto-consume repair powder
+// AUTO_REPAIR_FLAG  (0x01F70048): 1=enabled, set by Python (NOT by PNACH — no init here)
+// REPAIR_CONSUMED   (0x01F7004C): written by cave: 1=melee consumed, 2=ranged consumed
+//
+// Hooks jal AddAbsRate in calcWeaponParamWhp (melee) and calcWeaponParam2 (ranged).
+// Cave at 0x01F70B00
+
+// === Hooks: replace jal AddAbsRate in both functions ===
+patch=1,EE,201E87B4,extended,0C7DC2C0 // melee: jal cave (was jal AddAbsRate)
+patch=1,EE,201E8948,extended,0C7DC2C0 // ranged: jal cave (was jal AddAbsRate)
+
+// === Code cave at 0x01F70B00 ===
+// Entry: a0=battleCharaInfo, a1=slot, a2=0, f12=rate, ra=return addr
+//
+// We must NOT clobber a0/a1/a2/f12 before potentially calling AddAbsRate.
+// Use at (r1) for flag check since it's the assembler temp register.
+
+// 0x00: lui at, 0x01F7
+patch=1,EE,21F70B00,extended,3C0101F7
+// 0x04: lw at, 0x0048(at)  → at = AUTO_REPAIR_FLAG
+patch=1,EE,21F70B04,extended,8C210048
+// 0x08: bne at, zero, repair (offset=4 → delay@0x0C + 4*4 = 0x1C)
+patch=1,EE,21F70B08,extended,14200004
+// 0x0C: nop (delay)
+patch=1,EE,21F70B0C,extended,00000000
+
+// --- Flag not set: call original AddAbsRate, return ---
+// 0x10: j AddAbsRate (0x0019FEE0)  — tail call, reuses our ra
+patch=1,EE,21F70B10,extended,08067FB8
+// 0x14: nop (delay)
+patch=1,EE,21F70B14,extended,00000000
+
+// --- padding ---
+// 0x18: nop
+patch=1,EE,21F70B18,extended,00000000
+
+// --- repair: (0x1C) restore WHP to max, signal Python, skip AddAbsRate ---
+// Save ra and a1
+// 0x1C: addiu sp, sp, -16
+patch=1,EE,21F70B1C,extended,27BDFFF0
+// 0x20: sw ra, 12(sp)
+patch=1,EE,21F70B20,extended,AFBF000C
+// 0x24: sw a1, 8(sp)
+patch=1,EE,21F70B24,extended,AFA50008
+
+// a0=battleCharaInfo, a1=slot — call GetNowAccessWHp
+// 0x28: jal GetNowAccessWHp (0x0019F890)
+patch=1,EE,21F70B28,extended,0C067E24
+// 0x2C: nop (delay)
+patch=1,EE,21F70B2C,extended,00000000
+
+// v0 = COMMON_GAGE ptr. If null, skip.
+// 0x30: beq v0, zero, done (offset=5 → delay@0x34 + 5*4 = 0x48)
+patch=1,EE,21F70B30,extended,10400005
+// 0x34: nop (delay)
+patch=1,EE,21F70B34,extended,00000000
+
+// Write current = max
+// 0x38: lwc1 f0, 0(v0)   ; f0 = max
+patch=1,EE,21F70B38,extended,C4400000
+// 0x3C: swc1 f0, 4(v0)   ; current = max
+patch=1,EE,21F70B3C,extended,E4400004
+
+// REPAIR_CONSUMED = slot + 1
+// 0x40: lw a1, 8(sp)
+patch=1,EE,21F70B40,extended,8FA50008
+// 0x44: addiu a1, a1, 1
+patch=1,EE,21F70B44,extended,24A50001
+// 0x48: lui at, 0x01F7
+patch=1,EE,21F70B48,extended,3C0101F7
+// 0x4C: sw a1, 0x004C(at)
+patch=1,EE,21F70B4C,extended,AC25004C
+
+// done: restore and return (AddAbsRate skipped)
+// 0x50: lw ra, 12(sp)
+patch=1,EE,21F70B50,extended,8FBF000C
+// 0x54: jr ra
+patch=1,EE,21F70B54,extended,03E00008
+// 0x58: addiu sp, sp, 16 (delay)
+patch=1,EE,21F70B58,extended,27BD0010

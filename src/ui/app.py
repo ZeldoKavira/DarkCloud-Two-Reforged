@@ -29,10 +29,12 @@ class App:
     def __init__(self, state: GameState):
         self.state = state
         self.manager = ModManager(state.mem, state)
+        self.manager.on_options_loaded = self._on_options_loaded
 
         # Load saved settings
         self.manager.fast_start = settings.get("fast_start") or False
         self.manager.widescreen = settings.get("widescreen") or False
+        self.manager.auto_repair = settings.get("auto_repair") or False
 
         self.root = tk.Tk()
         from core.version import get_version
@@ -160,7 +162,21 @@ class App:
         tab = ttk.Frame(self.notebook)
         self.notebook.add(tab, text="Settings")
 
-        inner = ttk.Frame(tab, style="Panel.TFrame")
+        canvas = tk.Canvas(tab, bg=BG, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(tab, orient=tk.VERTICAL, command=canvas.yview)
+        scroll_frame = ttk.Frame(canvas)
+        scroll_frame.bind("<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        def _on_canvas_resize(event):
+            canvas.itemconfig(canvas.find_all()[0], width=event.width)
+        canvas.bind("<Configure>", _on_canvas_resize)
+
+        inner = ttk.Frame(scroll_frame, style="Panel.TFrame")
         inner.pack(fill=tk.X, padx=10, pady=10)
         ttk.Label(inner, text="Game Options", background=ACCENT, foreground=FG,
                   font=("Helvetica", 10, "bold"), padding=(8, 3)).pack(fill=tk.X)
@@ -184,10 +200,18 @@ class App:
         ttk.Label(opts, text="Enable Widescreen",
                   style="Dim.TLabel").pack(anchor=tk.W, padx=20)
 
-        # Run speed
+        self._auto_repair_var = tk.BooleanVar(value=self.manager.auto_repair)
+        tk.Checkbutton(opts, text="Auto Repair Powder", variable=self._auto_repair_var,
+                       command=self._toggle_auto_repair, bg=BG_PANEL, fg=FG,
+                       selectcolor=BG, activebackground=BG_PANEL, activeforeground=FG,
+                       font=("Helvetica", 10)).pack(anchor=tk.W, pady=(8, 2))
+        ttk.Label(opts, text="Automatically use repair powder when a weapon is about to break",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
+        # Town speed
         speed_row = ttk.Frame(opts, style="Panel.TFrame")
         speed_row.pack(anchor=tk.W, pady=(8, 2))
-        tk.Label(speed_row, text="Run Speed", bg=BG_PANEL, fg=FG,
+        tk.Label(speed_row, text="Town Speed", bg=BG_PANEL, fg=FG,
                  font=("Helvetica", 10)).pack(side=tk.LEFT)
         self._speed_var = tk.StringVar(value=settings.get("run_speed") or "1x (Default)")
         speed_menu = ttk.Combobox(speed_row, textvariable=self._speed_var,
@@ -195,7 +219,63 @@ class App:
                                   state="readonly", width=14)
         speed_menu.pack(side=tk.LEFT, padx=(8, 0))
         speed_menu.bind("<<ComboboxSelected>>", lambda e: self._set_run_speed())
-        ttk.Label(opts, text="Multiply character movement speed",
+        ttk.Label(opts, text="Movement speed in town areas",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
+        # Dungeon speed
+        dng_speed_row = ttk.Frame(opts, style="Panel.TFrame")
+        dng_speed_row.pack(anchor=tk.W, pady=(8, 2))
+        tk.Label(dng_speed_row, text="Dungeon Speed", bg=BG_PANEL, fg=FG,
+                 font=("Helvetica", 10)).pack(side=tk.LEFT)
+        self._dng_speed_var = tk.StringVar(value=settings.get("dng_speed") or "1x (Default)")
+        dng_speed_menu = ttk.Combobox(dng_speed_row, textvariable=self._dng_speed_var,
+                                      values=list(addr.SPEED_DNG_OPTIONS.keys()),
+                                      state="readonly", width=14)
+        dng_speed_menu.pack(side=tk.LEFT, padx=(8, 0))
+        dng_speed_menu.bind("<<ComboboxSelected>>", lambda e: self._set_dng_speed())
+        ttk.Label(opts, text="Movement speed in dungeon floors",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
+        # Pickup radius
+        pickup_row = ttk.Frame(opts, style="Panel.TFrame")
+        pickup_row.pack(anchor=tk.W, pady=(8, 2))
+        tk.Label(pickup_row, text="Pickup Radius", bg=BG_PANEL, fg=FG,
+                 font=("Helvetica", 10)).pack(side=tk.LEFT)
+        self._pickup_var = tk.StringVar(value=settings.get("pickup_radius") or "1x (Default)")
+        pickup_menu = ttk.Combobox(pickup_row, textvariable=self._pickup_var,
+                                   values=list(addr.PICKUP_RADIUS_OPTIONS.keys()),
+                                   state="readonly", width=14)
+        pickup_menu.pack(side=tk.LEFT, padx=(8, 0))
+        pickup_menu.bind("<<ComboboxSelected>>", lambda e: self._set_pickup_radius())
+        ttk.Label(opts, text="Multiply item pickup collection range",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
+        # Map position
+        map_row = ttk.Frame(opts, style="Panel.TFrame")
+        map_row.pack(anchor=tk.W, pady=(8, 2))
+        tk.Label(map_row, text="Large Map Position", bg=BG_PANEL, fg=FG,
+                 font=("Helvetica", 10)).pack(side=tk.LEFT)
+        self._map_pos_var = tk.StringVar(value=settings.get("map_position") or "Center (Default)")
+        map_menu = ttk.Combobox(map_row, textvariable=self._map_pos_var,
+                                values=list(addr.MINIMAP_POS_OPTIONS.keys()),
+                                state="readonly", width=18)
+        map_menu.pack(side=tk.LEFT, padx=(8, 0))
+        map_menu.bind("<<ComboboxSelected>>", lambda e: self._set_map_position())
+        ttk.Label(opts, text="Move the large dungeon minimap on screen",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
+        # Map position (targeting)
+        map_tgt_row = ttk.Frame(opts, style="Panel.TFrame")
+        map_tgt_row.pack(anchor=tk.W, pady=(8, 2))
+        tk.Label(map_tgt_row, text="Map Position (Targeting)", bg=BG_PANEL, fg=FG,
+                 font=("Helvetica", 10)).pack(side=tk.LEFT)
+        self._map_tgt_var = tk.StringVar(value=settings.get("map_position_target") or "Center (Default)")
+        map_tgt_menu = ttk.Combobox(map_tgt_row, textvariable=self._map_tgt_var,
+                                    values=list(addr.MINIMAP_POS_OPTIONS.keys()),
+                                    state="readonly", width=18)
+        map_tgt_menu.pack(side=tk.LEFT, padx=(8, 0))
+        map_tgt_menu.bind("<<ComboboxSelected>>", lambda e: self._set_map_position_target())
+        ttk.Label(opts, text="Map position when locked onto a monster",
                   style="Dim.TLabel").pack(anchor=tk.W, padx=20)
 
         # Debug
@@ -245,6 +325,9 @@ class App:
             self.status_label.config(text=snap.loop_name)
             self.status_dot.config(fg=GREEN)
             self._apply_run_speed()
+            self._apply_dng_speed()
+            self._apply_pickup_radius()
+            self._apply_map_position()
 
         emu_names = {0: "Running", 1: "Paused", 2: "Shutdown"}
         self._set(self.conn_fields, "PCSX2", "Connected" if snap.connected else "Disconnected",
@@ -305,24 +388,151 @@ class App:
         self.manager.widescreen = val
         settings.set("widescreen", val)
 
+    def _toggle_auto_repair(self):
+        val = self._auto_repair_var.get()
+        self.manager.auto_repair = val
+        settings.set("auto_repair", val)
+
     def _set_run_speed(self):
         label = self._speed_var.get()
         settings.set("run_speed", label)
+        idx = list(addr.SPEED_OPTIONS.keys()).index(label)
+        try:
+            self.state.mem.write_byte(addr.OPTION_SAVE_RUN_SPEED, idx)
+        except Exception:
+            pass
         self._apply_run_speed()
+
+    def _set_dng_speed(self):
+        label = self._dng_speed_var.get()
+        settings.set("dng_speed", label)
+        idx = list(addr.SPEED_DNG_OPTIONS.keys()).index(label)
+        try:
+            self.state.mem.write_byte(addr.OPTION_SAVE_DNG_SPEED, idx)
+        except Exception:
+            pass
+        self._apply_dng_speed()
+
+    def _apply_dng_speed(self):
+        dng_label = self._dng_speed_var.get()
+        dng_upper = addr.SPEED_DNG_OPTIONS.get(dng_label, 0x3F80)
+        if dng_upper == 0x3F80:
+            return
+        try:
+            self.state.mem.write_int(addr.SPEED_INSTR_DNG, 0x3C020000 | dng_upper)
+        except Exception:
+            pass
+
+    def _on_options_loaded(self, speed_label, pickup_label, map_label, map_tgt_label, dng_speed_label):
+        self._speed_var.set(speed_label)
+        settings.set("run_speed", speed_label)
+        self._dng_speed_var.set(dng_speed_label)
+        settings.set("dng_speed", dng_speed_label)
+        self._apply_dng_speed()
+        self._pickup_var.set(pickup_label)
+        settings.set("pickup_radius", pickup_label)
+        self._map_pos_var.set(map_label)
+        settings.set("map_position", map_label)
+        self._map_tgt_var.set(map_tgt_label)
+        settings.set("map_position_target", map_tgt_label)
 
     def _apply_run_speed(self):
         label = self._speed_var.get()
         upper16 = addr.SPEED_OPTIONS.get(label, 0x40a0)
-        if upper16 == 0x40a0:
-            return  # default, no patch needed
-        instr = addr.speed_lui(upper16)
+        dng_label = self._dng_speed_var.get()
+        dng_upper = addr.SPEED_DNG_OPTIONS.get(dng_label, 0x3F80)
         try:
-            cur = self.state.mem.read_int(addr.SPEED_INSTR_MAIN)
-            if cur != instr:
-                self.state.mem.write_int(addr.SPEED_INSTR_MAIN, instr)
-                log.info("Run speed → %s", label)
+            # Town
+            if upper16 != 0x40a0:
+                instr = addr.speed_lui(upper16)
+                if self.state.mem.read_int(addr.SPEED_INSTR_MAIN) != instr:
+                    self.state.mem.write_int(addr.SPEED_INSTR_MAIN, instr)
         except Exception:
             pass
+
+    def _set_pickup_radius(self):
+        label = self._pickup_var.get()
+        settings.set("pickup_radius", label)
+        idx = list(addr.PICKUP_RADIUS_OPTIONS.keys()).index(label)
+        try:
+            self.state.mem.write_byte(addr.OPTION_SAVE_PICKUP_RADIUS, idx)
+        except Exception:
+            pass
+        self._apply_pickup_radius()
+
+    def _apply_pickup_radius(self):
+        label = self._pickup_var.get()
+        upper16 = addr.PICKUP_RADIUS_OPTIONS.get(label, 0x41a0)
+        if upper16 == 0x41a0:
+            return
+        instr = addr.pickup_radius_lui(upper16)
+        try:
+            cur = self.state.mem.read_int(addr.PICKUP_RADIUS_INSTR)
+            if cur != instr:
+                self.state.mem.write_int(addr.PICKUP_RADIUS_INSTR, instr)
+                log.info("Pickup radius → %s", label)
+        except Exception:
+            pass
+
+    def _set_map_position(self):
+        label = self._map_pos_var.get()
+        settings.set("map_position", label)
+        idx = list(addr.MINIMAP_POS_OPTIONS.keys()).index(label)
+        try:
+            self.state.mem.write_byte(addr.OPTION_SAVE_MAP_POS, idx)
+        except Exception:
+            pass
+        self._apply_map_position()
+
+    def _set_map_position_target(self):
+        label = self._map_tgt_var.get()
+        settings.set("map_position_target", label)
+        idx = list(addr.MINIMAP_POS_OPTIONS.keys()).index(label)
+        try:
+            self.state.mem.write_byte(addr.OPTION_SAVE_MAP_POS_TARGET, idx)
+        except Exception:
+            pass
+        self._apply_map_position()
+
+    def _is_locked_on(self):
+        """Check if player is locked onto a monster."""
+        try:
+            chara_ptr = self.state.mem.read_int(addr.MAIN_CHARA)
+            if chara_ptr == 0:
+                return False
+            pine_chara = 0x20000000 + chara_ptr
+            return self.state.mem.read_short(pine_chara + addr.LOCKON_OFFSET) != 0
+        except Exception:
+            return False
+
+    def _apply_map_position(self):
+        if self._is_locked_on():
+            label = self._map_tgt_var.get()
+        else:
+            label = self._map_pos_var.get()
+        vals = addr.MINIMAP_POS_OPTIONS.get(label)
+        if not vals:
+            return
+        x13, y13, x2, y2 = vals
+        try:
+            # Site 1: li v0, X → 0x2402XXYY; li v1, Y → 0x2403XXYY
+            self._patch_li(addr.MINIMAP_LG_X1, 0x2402, x13)
+            self._patch_li(addr.MINIMAP_LG_Y1, 0x2403, y13)
+            # Site 2 (Sphida): li v1, X → 0x2403XXYY; li v0, Y → 0x2402XXYY
+            self._patch_li(addr.MINIMAP_LG_X2, 0x2403, x2)
+            self._patch_li(addr.MINIMAP_LG_Y2, 0x2402, y2)
+            # Site 3: li v0, X → 0x2402XXYY; li v1, Y → 0x2403XXYY
+            self._patch_li(addr.MINIMAP_LG_X3, 0x2402, x13)
+            self._patch_li(addr.MINIMAP_LG_Y3, 0x2403, y13)
+        except Exception:
+            pass
+
+    def _patch_li(self, pine_addr, opcode_hi, imm16):
+        """Patch a `li reg, imm16` instruction if it differs."""
+        instr = (opcode_hi << 16) | imm16
+        cur = self.state.mem.read_int(pine_addr)
+        if cur != instr:
+            self.state.mem.write_int(pine_addr, instr)
 
     def _dump_msg_table(self):
         try:
@@ -359,10 +569,134 @@ class App:
             log.error("Dump failed: %s", e)
 
     def _test_dialog(self):
-        self.dialog.ask("Do you want a DC2 mod?", callback=self._on_answer)
+        """Inject row 16 + start poll."""
+        import struct
+        try:
+            ptr = self.state.mem.read_int(0x203781B0)
+            if ptr == 0:
+                log.info("Options not open"); return
+            pine = 0x20000000 + ptr
+            obf = self.state.mem.read_int(0x20378198)
+            if obf == 0: return
+            op = 0x20000000 + obf
+            count = self.state.mem.read_short(op + 0x68)
+            if count <= 33:
+                self._inject_row16(pine, op, count)
+            self._pine = pine
+            self._poll_fix()
+            log.info("Injected + poll active")
+        except Exception as e:
+            log.error("Failed: %s", e)
 
-    def _on_answer(self, choice):
-        self.dialog.show("You chose: " + ("Yes" if choice else "No"), duration=10)
+    def _poll_fix(self):
+        import struct
+        try:
+            ptr = self.state.mem.read_int(0x203781B0)
+            if ptr == 0: return
+            cursor = self.state.mem.read_int(self._pine + 0x374)
+            if cursor >= 16:
+                sub_sel = self.state.mem.read_int(self._pine + 0x37C)
+                btn_off = 0x164 + cursor * 0xC + sub_sel * 4
+                btn_ptr = self.state.mem.read_int(self._pine + btn_off)
+                if btn_ptr:
+                    bp = 0x20000000 + btn_ptr
+                    bx = struct.unpack('f', struct.pack('I', self.state.mem.read_int(bp + 0x1C)))[0]
+                    by = struct.unpack('f', struct.pack('I', self.state.mem.read_int(bp + 0x20)))[0]
+                    obf = self.state.mem.read_int(0x20378198)
+                    op = 0x20000000 + obf
+                    obf_x = struct.unpack('f', struct.pack('I', self.state.mem.read_int(op + 0x0C)))[0]
+                    obf_y = struct.unpack('f', struct.pack('I', self.state.mem.read_int(op + 0x10)))[0]
+                    bsx = obf_x + bx  # button screen X
+                    bsy = obf_y + by  # button screen Y
+                    ctx = bsx - 50.0
+                    cty = bsy - 3.0
+                    rtx = bsx - 2.0
+                    rty = bsy - 2.0
+                    self.state.mem.write_int(0x21F70B60, struct.unpack('I', struct.pack('f', ctx))[0])
+                    self.state.mem.write_int(0x21F70B64, struct.unpack('I', struct.pack('f', cty))[0])
+                    self.state.mem.write_int(0x21F70B68, struct.unpack('I', struct.pack('f', rtx))[0])
+                    self.state.mem.write_int(0x21F70B6C, struct.unpack('I', struct.pack('f', rty))[0])
+                    # Rect part addr + size for cave to fix
+                    mci = self.state.mem.read_int(0x203779E8)
+                    mcp = 0x20000000 + mci
+                    rf = 0x20000000 + self.state.mem.read_int(mcp + 0x13C)
+                    rpp = self.state.mem.read_int(rf + 0x6C)  # PS2 addr of part[0]
+                    self.state.mem.write_int(0x21F70B70, rpp)
+                    self.state.mem.write_int(0x21F70B74, struct.unpack('I', struct.pack('f', 50.0))[0])
+                    self.state.mem.write_int(0x21F70B78, struct.unpack('I', struct.pack('f', 16.0))[0])
+            else:
+                self.state.mem.write_int(0x21F70B60, 0)  # disable
+            self.root.after(16, self._poll_fix)
+        except Exception as e:
+            log.error("poll: %s", e)
+
+    def _inject_row16(self, pine, op, old_count):
+        import struct
+        old_ptr = self.state.mem.read_int(op + 0x6C)
+        cave = 0x21F70C00
+        old_pp = 0x20000000 + old_ptr
+        for i in range(0, old_count * 0x48, 4):
+            self.state.mem.write_int(cave + i, self.state.mem.read_int(old_pp + i))
+        src = cave
+        tex_ptr = self.state.mem.read_int(src + 0x14)
+        tex_idx = self.state.mem.read_byte(src + 0x18)
+        src_w = self.state.mem.read_int(src + 0x24)
+        src_h = self.state.mem.read_int(src + 0x28)
+        flags = self.state.mem.read_byte(src + 0x19)
+        ablend = self.state.mem.read_byte(src + 0x1A)
+        new_count = old_count + 2
+        for b in range(2):
+            a = cave + (old_count + b) * 0x48
+            for i in range(0, 0x48, 4):
+                self.state.mem.write_int(a + i, 0)
+            self.state.mem.write_byte(a + 0x04, 1)
+            self.state.mem.write_byte(a + 0x05, 1)
+            bright = 0x80 if b == 0 else 0x40
+            for off in [0x07, 0x08, 0x09]:
+                self.state.mem.write_byte(a + off, bright)
+            self.state.mem.write_byte(a + 0x0A, 0x80)
+            self.state.mem.write_int(a + 0x14, tex_ptr)
+            self.state.mem.write_byte(a + 0x18, tex_idx)
+            self.state.mem.write_byte(a + 0x19, flags)
+            self.state.mem.write_byte(a + 0x1A, ablend)
+            x = 230.0 + b * 60.0
+            self.state.mem.write_int(a + 0x1C, struct.unpack('I', struct.pack('f', x))[0])
+            self.state.mem.write_int(a + 0x20, struct.unpack('I', struct.pack('f', 384.0))[0])
+            self.state.mem.write_int(a + 0x24, src_w)
+            self.state.mem.write_int(a + 0x28, src_h)
+        new_ps2 = cave - 0x20000000
+        self.state.mem.write_int(op + 0x6C, new_ps2)
+        self.state.mem.write_short(op + 0x68, new_count)
+        p33 = new_ps2 + old_count * 0x48
+        self.state.mem.write_int(pine + 0x224, p33)
+        self.state.mem.write_int(pine + 0x228, p33 + 0x48)
+        self.state.mem.write_int(pine + 0x22C, 0)
+
+        # Write name strings at 0x01F70A40 (safe from auto-repair cave at 0x01F70B00)
+        names_base = 0x21F70A40
+        for b, name in enumerate([b"INDEX160\x00\x00\x00\x00", b"INDEX161\x00\x00\x00\x00"]):
+            na = names_base + b * 16
+            for i, ch in enumerate(name):
+                self.state.mem.write_byte(na + i, ch)
+            # Set name_ptr on the part
+            part_addr = cave + (old_count + b) * 0x48
+            self.state.mem.write_int(part_addr, (na - 0x20000000))  # PS2 addr
+        self.state.mem.write_int(pine + 0x114 + 16 * 4, 2)
+        v = struct.unpack('I', struct.pack('f', 17.0))[0]
+        self.state.mem.write_int(0x203769F8, v)
+        self.state.mem.write_int(0x203769FC, v)
+        log.info("Row 16 injected (count %d→%d)", old_count, new_count)
+        # Verify: read back the last 2 parts' names
+        for b in range(2):
+            pa = cave + (old_count + b) * 0x48
+            np = self.state.mem.read_int(pa)  # name_ptr (PS2 addr)
+            if np:
+                npp = 0x20000000 + np
+                name = ''.join(chr(self.state.mem.read_byte(npp + i)) for i in range(10)
+                               if self.state.mem.read_byte(npp + i) != 0)
+                log.info("  part[%d] name='%s' name_ptr=0x%08X", old_count + b, name, np)
+            else:
+                log.info("  part[%d] name_ptr=NULL", old_count + b)
 
     def _on_close(self):
         self.manager.stop_nowait()
