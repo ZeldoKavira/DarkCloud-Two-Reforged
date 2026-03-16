@@ -78,6 +78,7 @@ class App:
 
         self._build_data_tab()
         self._build_settings_tab()
+        self.notebook.select(1)  # default to Settings tab
 
         # Log area
         log_frame = ttk.Frame(self.root)
@@ -181,6 +182,14 @@ class App:
         ttk.Label(inner, text="Game Options", background=ACCENT, foreground=FG,
                   font=("Helvetica", 10, "bold"), padding=(8, 3)).pack(fill=tk.X)
 
+        # Debug — at top for quick testing
+        debug = ttk.Frame(inner, style="Panel.TFrame")
+        debug.pack(fill=tk.X, padx=8, pady=8)
+        tk.Button(debug, text="Test Inject", command=self._test_dialog,
+                  bg=ACCENT, fg=FG, font=("Helvetica", 10)).pack(anchor=tk.W)
+        tk.Button(debug, text="Dump Message Table", command=self._dump_msg_table,
+                  bg=ACCENT, fg=FG, font=("Helvetica", 10)).pack(anchor=tk.W, pady=(4, 0))
+
         opts = ttk.Frame(inner, style="Panel.TFrame")
         opts.pack(fill=tk.X, padx=8, pady=8)
 
@@ -277,14 +286,6 @@ class App:
         map_tgt_menu.bind("<<ComboboxSelected>>", lambda e: self._set_map_position_target())
         ttk.Label(opts, text="Map position when locked onto a monster",
                   style="Dim.TLabel").pack(anchor=tk.W, padx=20)
-
-        # Debug
-        debug = ttk.Frame(inner, style="Panel.TFrame")
-        debug.pack(fill=tk.X, padx=8, pady=8)
-        tk.Button(debug, text="Test Dialog (msg 0x66)", command=self._test_dialog,
-                  bg=ACCENT, fg=FG, font=("Helvetica", 10)).pack(anchor=tk.W)
-        tk.Button(debug, text="Dump Message Table", command=self._dump_msg_table,
-                  bg=ACCENT, fg=FG, font=("Helvetica", 10)).pack(anchor=tk.W, pady=(4, 0))
 
     # --- helpers ---
 
@@ -589,51 +590,99 @@ class App:
             log.error("Failed: %s", e)
 
     def _poll_fix(self):
+        """Poll to update cursor/rect positions for injected option rows.
+
+        The PNACH cave (10-cursor-fix) hooks after FormStep and writes
+        cursor + rect form positions from flag memory at 0x01F70B60-0x01F70B78.
+        This poll computes the correct positions from the selected button's
+        screen coordinates and writes them to the flag area.
+
+        Also updates the label text Y position at 0x01F80044 for the draw cave.
+
+        Flag memory layout (0x01F70B60+):
+          +0x00 (0xB60): cursor form target X (float, 0=disabled)
+          +0x04 (0xB64): cursor form target Y (float)
+          +0x08 (0xB68): rect form target X (float)
+          +0x0C (0xB6C): rect form target Y (float)
+          +0x10 (0xB70): rect part[0] PS2 addr (for size fix)
+          +0x14 (0xB74): rect part width (float)
+          +0x18 (0xB78): rect part height (float)
+        """
         import struct
         try:
-            ptr = self.state.mem.read_int(0x203781B0)
-            if ptr == 0: return
-            cursor = self.state.mem.read_int(self._pine + 0x374)
-            if cursor >= 16:
-                sub_sel = self.state.mem.read_int(self._pine + 0x37C)
-                btn_off = 0x164 + cursor * 0xC + sub_sel * 4
-                btn_ptr = self.state.mem.read_int(self._pine + btn_off)
-                if btn_ptr:
-                    bp = 0x20000000 + btn_ptr
-                    bx = struct.unpack('f', struct.pack('I', self.state.mem.read_int(bp + 0x1C)))[0]
-                    by = struct.unpack('f', struct.pack('I', self.state.mem.read_int(bp + 0x20)))[0]
-                    obf = self.state.mem.read_int(0x20378198)
-                    op = 0x20000000 + obf
-                    obf_x = struct.unpack('f', struct.pack('I', self.state.mem.read_int(op + 0x0C)))[0]
-                    obf_y = struct.unpack('f', struct.pack('I', self.state.mem.read_int(op + 0x10)))[0]
-                    bsx = obf_x + bx  # button screen X
-                    bsy = obf_y + by  # button screen Y
-                    ctx = bsx - 50.0
-                    cty = bsy - 3.0
-                    rtx = bsx - 2.0
-                    rty = bsy - 2.0
-                    self.state.mem.write_int(0x21F70B60, struct.unpack('I', struct.pack('f', ctx))[0])
-                    self.state.mem.write_int(0x21F70B64, struct.unpack('I', struct.pack('f', cty))[0])
-                    self.state.mem.write_int(0x21F70B68, struct.unpack('I', struct.pack('f', rtx))[0])
-                    self.state.mem.write_int(0x21F70B6C, struct.unpack('I', struct.pack('f', rty))[0])
-                    # Rect part addr + size for cave to fix
-                    mci = self.state.mem.read_int(0x203779E8)
-                    mcp = 0x20000000 + mci
-                    rf = 0x20000000 + self.state.mem.read_int(mcp + 0x13C)
-                    rpp = self.state.mem.read_int(rf + 0x6C)  # PS2 addr of part[0]
-                    self.state.mem.write_int(0x21F70B70, rpp)
-                    self.state.mem.write_int(0x21F70B74, struct.unpack('I', struct.pack('f', 50.0))[0])
-                    self.state.mem.write_int(0x21F70B78, struct.unpack('I', struct.pack('f', 16.0))[0])
+            # Bail if options screen closed (CMenuOptionPtr == 0)
+            menu_opt_ptr = self.state.mem.read_int(addr.CMENU_OPTION_PTR)
+            if menu_opt_ptr == 0:
+                return
+
+            pine_opt = self._pine  # PINE addr of CMenuOption
+            cursor_row = self.state.mem.read_int(pine_opt + 0x374)
+
+            if cursor_row >= 16:
+                # --- Read selected button's position ---
+                sub_selection = self.state.mem.read_int(pine_opt + 0x37C)
+                btn_ptr_offset = 0x164 + cursor_row * 0xC + sub_selection * 4
+                btn_ps2 = self.state.mem.read_int(pine_opt + btn_ptr_offset)
+                if not btn_ps2:
+                    self.root.after(200, self._poll_fix)
+                    return
+
+                pine_btn = 0x20000000 + btn_ps2
+                btn_x = struct.unpack('f', struct.pack('I', self.state.mem.read_int(pine_btn + 0x1C)))[0]
+                btn_y = struct.unpack('f', struct.pack('I', self.state.mem.read_int(pine_btn + 0x20)))[0]
+
+                # --- Read OptionButtonForm base position (scrolls with the list) ---
+                obf_ps2 = self.state.mem.read_int(addr.OPTION_BUTTON_FORM)
+                pine_obf = 0x20000000 + obf_ps2
+                obf_x = struct.unpack('f', struct.pack('I', self.state.mem.read_int(pine_obf + 0x0C)))[0]
+                obf_y = struct.unpack('f', struct.pack('I', self.state.mem.read_int(pine_obf + 0x10)))[0]
+
+                # --- Compute screen position of selected button ---
+                btn_screen_x = obf_x + btn_x
+                btn_screen_y = obf_y + btn_y
+
+                # --- Cursor form position (spinning arrow, offset -50,-3 from button) ---
+                cursor_target_x = btn_screen_x - 50.0
+                cursor_target_y = btn_screen_y - 3.0
+
+                # --- Rect form position (dashed rectangle, offset -2,-2 from button) ---
+                rect_target_x = btn_screen_x - 2.0
+                rect_target_y = btn_screen_y - 2.0
+
+                # --- Write cursor/rect targets to cave flag area ---
+                pack_f = lambda f: struct.unpack('I', struct.pack('f', f))[0]
+                FLAG_BASE = 0x21F70B60
+                self.state.mem.write_int(FLAG_BASE + 0x00, pack_f(cursor_target_x))
+                self.state.mem.write_int(FLAG_BASE + 0x04, pack_f(cursor_target_y))
+                self.state.mem.write_int(FLAG_BASE + 0x08, pack_f(rect_target_x))
+                self.state.mem.write_int(FLAG_BASE + 0x0C, pack_f(rect_target_y))
+
+                # --- Write rect part addr + size for the cave to fix SetWakuWH ---
+                mci_ps2 = self.state.mem.read_int(addr.MENU_COMMON_INFO)
+                pine_mci = 0x20000000 + mci_ps2
+                rect_form_ps2 = self.state.mem.read_int(pine_mci + 0x13C)
+                pine_rect_form = 0x20000000 + rect_form_ps2
+                rect_part0_ps2 = self.state.mem.read_int(pine_rect_form + 0x6C)
+                self.state.mem.write_int(FLAG_BASE + 0x10, rect_part0_ps2)
+                self.state.mem.write_int(FLAG_BASE + 0x14, pack_f(50.0))   # rect width
+                self.state.mem.write_int(FLAG_BASE + 0x18, pack_f(16.0))   # rect height
+
+                # --- Update label text Y to track the button row ---
+                LABEL_BASE = 0x21F80000
+                self.state.mem.write_int(LABEL_BASE + 0x40, 86)                # label X
+                self.state.mem.write_int(LABEL_BASE + 0x44, int(btn_screen_y) + 2)  # label Y
             else:
-                self.state.mem.write_int(0x21F70B60, 0)  # disable
-            self.root.after(16, self._poll_fix)
+                # Cursor on a native row — disable cave override
+                self.state.mem.write_int(0x21F70B60, 0)
+
+            self.root.after(200, self._poll_fix)
         except Exception as e:
-            log.error("poll: %s", e)
+            log.error("Options poll error: %s", e)
 
     def _inject_row16(self, pine, op, old_count):
         import struct
         old_ptr = self.state.mem.read_int(op + 0x6C)
-        cave = 0x21F70C00
+        cave = 0x21F72000
         old_pp = 0x20000000 + old_ptr
         for i in range(0, old_count * 0x48, 4):
             self.state.mem.write_int(cave + i, self.state.mem.read_int(old_pp + i))
@@ -697,6 +746,17 @@ class App:
                 log.info("  part[%d] name='%s' name_ptr=0x%08X", old_count + b, name, np)
             else:
                 log.info("  part[%d] name_ptr=NULL", old_count + b)
+        # Write label text at 0x01F80000
+        label = b"Run Speed\x00\x00\x00\x00\x00\x00\x00"
+        for i, ch in enumerate(label):
+            self.state.mem.write_byte(0x21F80000 + i, ch)
+        # Write label X/Y position (near the button row)
+        # The label should be to the left of the buttons
+        # Buttons are at screen X ~316, label should be around X=100
+        # Y should match the button Y
+        self.state.mem.write_int(0x21F80040, 86)
+        self.state.mem.write_int(0x21F80044, 200)
+        log.info("Draw flag set, label at 0x01F80000, X=86 Y=200")
 
     def _on_close(self):
         self.manager.stop_nowait()
@@ -705,6 +765,10 @@ class App:
 
     def run(self):
         self.manager.start()
+        # Periodic no-op so Tkinter yields to signal handlers (Ctrl+C)
+        def _poll():
+            self.root.after(500, _poll)
+        _poll()
         self.root.mainloop()
 
 

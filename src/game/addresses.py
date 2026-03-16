@@ -162,7 +162,7 @@ class Pad:
     DOWN     = 0x4000
     LEFT     = 0x8000
 
-# --- Run speed ---
+# --- Dialog system ---
 # Town: CharaControl multiplies analog input by frameRate * 5.0
 # The 5.0 is loaded via `lui` at these addresses:
 SPEED_INSTR_MAIN = 0x201a58e0       # CharaControl (town) — lui v0, 0x40a0
@@ -244,6 +244,13 @@ MINIMAP_POS_OPTIONS = {
 # --- Lock-on targeting ---
 # MainChara is a pointer; *(MainChara) + 0x772 is a short: 0 = not locked on, non-zero = locked on
 LOCKON_OFFSET = 0x772
+
+# --- Options menu extension ---
+CMENU_OPTION_PTR = 0x203781B0          # Pointer to CMenuOption object (valid when options screen open)
+OPTION_BUTTON_FORM = 0x20378198        # Pointer to OptionButtonForm (button sprites form)
+MENU_COMMON_INFO = 0x203779E8          # Pointer to MenuCommonInfo (menu state struct)
+CONFIG_OPTION_NUM_I = 0x203769F8       # Float: number of navigable option rows
+CONFIG_OPTION_NUM_F = 0x203769FC       # Float: same (used by different code paths)
 
 # --- Dialog system ---
 DIALOG_MODE = 0x21F70038            # Window mode for next dialog (0/4=passive, 5=interactive)

@@ -1,0 +1,59 @@
+// Options screen draw hook — renders custom option labels via CFont
+// Label data at 0x01F80000+
+
+// Patch drawfunctbl[7]
+patch=1,EE,2035099C,extended,01F70E00
+// Persist X via PNACH
+patch=1,EE,21F80040,extended,00000056 // X = 86
+
+// === Draw cave at 0x01F70E00 ===
+// E00: prologue
+patch=1,EE,21F70E00,extended,27BDFFD0 // addiu sp, -48
+patch=1,EE,21F70E04,extended,AFBF0000 // sw ra, 0(sp)
+patch=1,EE,21F70E08,extended,AFB00004 // sw s0, 4(sp)
+// E0C: FormDraw(MenuPosData)
+patch=1,EE,21F70E0C,extended,8F849450 // lw a0, -0x6BB0(gp)
+patch=1,EE,21F70E10,extended,0C08AD0C // jal FormDraw
+patch=1,EE,21F70E14,extended,00000000 // nop
+// E18: check label
+patch=1,EE,21F70E18,extended,3C1001F8 // lui s0, 0x01F8
+patch=1,EE,21F70E1C,extended,92020000 // lbu v0, 0(s0)
+// beq v0, zero, epilogue (E90). offset=(E90-E24)/4=27
+patch=1,EE,21F70E20,extended,1040001B
+patch=1,EE,21F70E24,extended,00000000
+// E28: SetFuchi(CFont, 5)
+patch=1,EE,21F70E28,extended,3C04003E
+patch=1,EE,21F70E2C,extended,24848090
+patch=1,EE,21F70E30,extended,0C0B515C // jal SetFuchi
+patch=1,EE,21F70E34,extended,34050005 // li a1, 5
+// E38: SetDrawSize(CFont, 16, 20)
+patch=1,EE,21F70E38,extended,3C04003E
+patch=1,EE,21F70E3C,extended,24848090
+patch=1,EE,21F70E40,extended,34050010
+patch=1,EE,21F70E44,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F70E48,extended,34060014
+// E4C: SetClearance(CFont, 16, 20)
+patch=1,EE,21F70E4C,extended,3C04003E
+patch=1,EE,21F70E50,extended,24848090
+patch=1,EE,21F70E54,extended,34050010
+patch=1,EE,21F70E58,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70E5C,extended,34060014
+// E60: SetColor(CFont, 0x80667678) — uint version, RGBA packed
+patch=1,EE,21F70E60,extended,3C04003E
+patch=1,EE,21F70E64,extended,24848090
+patch=1,EE,21F70E68,extended,3C058068 // lui a1, 0x8068
+patch=1,EE,21F70E6C,extended,0C0B5148 // jal SetColor_Ui (0x002D4520)
+patch=1,EE,21F70E70,extended,34A56A6B // ori a1, 0x6A6B (delay) — 0x80686A6B
+// E74: DrawDirect(CFont, label, X, Y)
+patch=1,EE,21F70E74,extended,3C04003E
+patch=1,EE,21F70E78,extended,24848090
+patch=1,EE,21F70E7C,extended,26050000 // addiu a1, s0, 0 — label at 0x01F80000
+patch=1,EE,21F70E80,extended,8E060040 // lw a2, 0x40(s0) — X
+patch=1,EE,21F70E84,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70E88,extended,8E070044 // lw a3, 0x44(s0) — Y (delay)
+patch=1,EE,21F70E8C,extended,00000000
+// Epilogue (E90)
+patch=1,EE,21F70E90,extended,8FB00004
+patch=1,EE,21F70E94,extended,8FBF0000
+patch=1,EE,21F70E98,extended,03E00008 // jr ra
+patch=1,EE,21F70E9C,extended,27BD0030 // addiu sp, 48
