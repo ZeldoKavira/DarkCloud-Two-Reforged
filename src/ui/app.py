@@ -1034,9 +1034,12 @@ class App:
 
     def _inject_btn_textures(self, cave, btn_templates):
         """Write custom button texture patch and create TexGetInfo entries."""
-        import os, json, struct
-        tex_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                               '..', 'Textures', 'OptionsMenu')
+        import os, json, struct, sys
+        if getattr(sys, 'frozen', False):
+            base = sys._MEIPASS
+        else:
+            base = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..')
+        tex_dir = os.path.join(base, 'Textures', 'OptionsMenu')
         patch_path = os.path.join(tex_dir, 'btn_patch.bin')
         meta_path = os.path.join(tex_dir, 'btn_patch_meta.json')
         if not os.path.exists(patch_path):

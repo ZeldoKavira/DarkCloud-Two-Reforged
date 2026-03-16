@@ -50,10 +50,24 @@ jobs:
         run: bash scripts/build-pnach.sh
         shell: bash
 
+      - name: Build button textures
+        run: python scripts/build_buttons.py
+        shell: bash
+
       - name: Build executable
-        run: >
-          pyinstaller --onefile --name DC2-Reforged --windowed
-          src/main.py
+        run: |
+          SEP=":"
+          if [ "$RUNNER_OS" = "Windows" ]; then SEP=";"; fi
+          pyinstaller --onefile --name DC2-Reforged --windowed \
+            --add-data "Textures/OptionsMenu/btn_patch.bin${SEP}Textures/OptionsMenu" \
+            --add-data "Textures/OptionsMenu/btn_patch_meta.json${SEP}Textures/OptionsMenu" \
+            --add-data "Textures/OptionsMenu/button_uvs.json${SEP}Textures/OptionsMenu" \
+            src/main.py
+        shell: bash
+
+      - name: Copy assets to dist
+        run: |
+          cp pcsx2-files/1DF41F33.pnach dist/
         shell: bash
 
       - name: Zip artifact (Windows)
