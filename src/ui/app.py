@@ -33,6 +33,7 @@ class App:
         self._opts_injected = False
         self._custom_rows = []
         self._last_opt_vals = {}
+        self._btn_uvs = []
 
         # Load saved settings
         self.manager.fast_start = settings.get("fast_start") or False
@@ -586,8 +587,18 @@ class App:
         except Exception as e:
             log.error("Dump failed: %s", e)
 
+    # Known button texture indices
+    BTN_TEX = {
+        114: "ON",       115: "OFF",
+        116: "Normal",   117: "Fast",
+        118: "Stereo",   119: "Mono",
+        120: "Small",    121: "Large",
+        122: "1",        123: "2",        124: "3",
+        125: "Normal2",  126: "Reverse",
+    }
+
     def _test_dialog(self):
-        """Manual inject trigger (kept for debug)."""
+        """Manual inject trigger."""
         self._options_inject()
 
     def _options_auto_poll(self):
@@ -648,18 +659,25 @@ class App:
                 self.state.mem.write_int(0x21F8004C, cy)
                 self.state.mem.write_int(0x21F80050, cy + ch)
 
-            # Update label Y for all custom rows
+            # Update label Y and button X/Y for all custom rows
             for row_i, row in enumerate(self._custom_rows):
                 game_row = 16 + row_i
-                btn_ps2 = self.state.mem.read_int(pine_opt + 0x164 + game_row * 0xC)
-                if btn_ps2:
-                    pine_btn = 0x20000000 + btn_ps2
-                    btn_y = read_f(pine_btn + 0x20)
-                    obf_ps2 = self.state.mem.read_int(addr.OPTION_BUTTON_FORM)
-                    pine_obf = 0x20000000 + obf_ps2
-                    obf_y = read_f(pine_obf + 0x10)
-                    label_base = 0x21F80000 + row_i * 0x80
-                    self.state.mem.write_int(label_base + 0x44, int(obf_y + btn_y) + 2)
+                label_base = 0x21F80000 + row_i * 0x80
+                obf_ps2 = self.state.mem.read_int(addr.OPTION_BUTTON_FORM)
+                pine_obf = 0x20000000 + obf_ps2
+                obf_x = read_f(pine_obf + 0x0C)
+                obf_y = read_f(pine_obf + 0x10)
+                for b in range(row["buttons"]):
+                    btn_ps2 = self.state.mem.read_int(pine_opt + 0x164 + game_row * 0xC + b * 4)
+                    if btn_ps2:
+                        pb = 0x20000000 + btn_ps2
+                        bx = obf_x + read_f(pb + 0x1C)
+                        by = obf_y + read_f(pb + 0x20)
+                        if b == 0:
+                            self.state.mem.write_int(label_base + 0x44, int(by) + 2)  # label Y
+                        # Button text position (centered on button)
+                        self.state.mem.write_int(label_base + 0x48 + b * 8, int(bx) + 5)
+                        self.state.mem.write_int(label_base + 0x4C + b * 8, int(by) + 2)
 
             if cursor_row >= 16:
                 sub_selection = self.state.mem.read_int(pine_opt + 0x37C)
@@ -684,12 +702,16 @@ class App:
                     pine_rect_form = 0x20000000 + rect_form_ps2
                     rect_part0_ps2 = self.state.mem.read_int(pine_rect_form + 0x6C)
                     self.state.mem.write_int(FLAG_BASE + 0x10, rect_part0_ps2)
-                    self.state.mem.write_int(FLAG_BASE + 0x14, pack_f(50.0))
+                    # Rect size: button width - 6, fixed height 16
+                    raw_w = self.state.mem.read_int(pine_btn + 0x24)  # float-encoded
+                    import struct as st
+                    btn_w_px = st.unpack('f', st.pack('I', raw_w))[0]
+                    self.state.mem.write_int(FLAG_BASE + 0x14, pack_f(btn_w_px - 6.0))
                     self.state.mem.write_int(FLAG_BASE + 0x18, pack_f(16.0))
             else:
                 self.state.mem.write_int(0x21F70B60, 0)
 
-            # Detect X press on custom rows
+            # Update highlights and detect changes for all custom rows
             for row_i, row in enumerate(self._custom_rows):
                 game_row = 16 + row_i
                 cfg_addr = 0x21F80060 + row_i * 4
@@ -698,15 +720,15 @@ class App:
                 if old_val is not None and new_val != old_val:
                     log.info("%s changed to %d", row["label"], new_val)
                     row["on_change"](new_val)
-                    # Update button highlights
-                    for b in range(row["buttons"]):
-                        btn_ps2 = self.state.mem.read_int(pine_opt + 0x164 + game_row * 0xC + b * 4)
-                        if btn_ps2:
-                            pa = 0x20000000 + btn_ps2
-                            bright = 0x80 if b == new_val else 0x40
-                            for off in [0x07, 0x08, 0x09]:
-                                self.state.mem.write_byte(pa + off, bright)
                 self._last_opt_vals[row_i] = new_val
+                # Always update button highlights
+                for b in range(row["buttons"]):
+                    btn_ps2 = self.state.mem.read_int(pine_opt + 0x164 + game_row * 0xC + b * 4)
+                    if btn_ps2:
+                        pa = 0x20000000 + btn_ps2
+                        bright = 0x80 if b == new_val else 0x40
+                        for off in [0x07, 0x08, 0x09]:
+                            self.state.mem.write_byte(pa + off, bright)
 
             self.root.after(200, self._options_cursor_poll)
         except Exception as e:
@@ -718,10 +740,12 @@ class App:
         pack_f = lambda f: struct.unpack('I', struct.pack('f', f))[0]
 
         self._custom_rows = [
-            {"label": "Run Speed",   "buttons": 2, "config_ps2": 0x01F80060,
-             "init": lambda: 1 if self.state.mem.read_int(addr.SPEED_INSTR_MAIN) != addr.speed_lui(0x40A0) else 0,
+            {"label": "Run Speed",   "buttons": 3, "config_ps2": 0x01F80060,
+             "btn_tex": [127, 128, 129], "btn_text": [],
+             "init": self._init_run_speed,
              "on_change": self._on_run_speed_change},
             {"label": "Auto Repair", "buttons": 2, "config_ps2": 0x01F80064,
+             "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if self.manager.auto_repair else 1,
              "on_change": self._on_auto_repair_change},
         ]
@@ -734,13 +758,22 @@ class App:
         for i in range(0, old_count * 0x48, 4):
             self.state.mem.write_int(cave + i, self.state.mem.read_int(old_pp + i))
 
-        # Read template button properties from part[0]
-        tex_ptr = self.state.mem.read_int(cave + 0x14)
-        tex_idx = self.state.mem.read_byte(cave + 0x18)
-        src_w = self.state.mem.read_int(cave + 0x24)
-        src_h = self.state.mem.read_int(cave + 0x28)
-        flags = self.state.mem.read_byte(cave + 0x19)
-        ablend = self.state.mem.read_byte(cave + 0x1A)
+        # Read template button properties from native row 0 parts
+        # Part 0 = INDEX00 (ON button), Part 1 = INDEX01 (OFF button)
+        btn_templates = []
+        for ti in range(2):
+            p = cave + ti * 0x48
+            btn_templates.append({
+                "tex_ptr": self.state.mem.read_int(p + 0x14),
+                "tex_idx": self.state.mem.read_byte(p + 0x18),
+                "flags": self.state.mem.read_byte(p + 0x19),
+                "ablend": self.state.mem.read_byte(p + 0x1A),
+                "w": self.state.mem.read_int(p + 0x24),
+                "h": self.state.mem.read_int(p + 0x28),
+            })
+
+        # Inject custom button texture patch (must happen before row setup)
+        self._inject_btn_textures(cave, btn_templates)
 
         part_idx = old_count
         names_base = 0x21F70A40
@@ -761,16 +794,32 @@ class App:
                 for off in [0x07, 0x08, 0x09]:
                     self.state.mem.write_byte(a + off, bright)
                 self.state.mem.write_byte(a + 0x0A, 0x80)  # alpha
-                self.state.mem.write_int(a + 0x14, tex_ptr)
-                self.state.mem.write_byte(a + 0x18, tex_idx)
-                self.state.mem.write_byte(a + 0x19, flags)
-                self.state.mem.write_byte(a + 0x1A, ablend)
-                x = 230.0 + b * 60.0
+                tex_idx = row["btn_tex"][b]
+                if tex_idx < len(btn_templates):
+                    tmpl = btn_templates[tex_idx]
+                else:
+                    tmpl = btn_templates[0]  # use ON button as base template
+                self.state.mem.write_int(a + 0x14, tmpl["tex_ptr"])
+                self.state.mem.write_byte(a + 0x18, tex_idx if tex_idx >= 127 else tmpl["tex_idx"])
+                self.state.mem.write_byte(a + 0x19, tmpl["flags"])
+                self.state.mem.write_byte(a + 0x1A, tmpl["ablend"])
+                # Get button size and position
+                if tex_idx >= 127:
+                    btn_w = float(self._btn_uvs[tex_idx - 127]["w"])
+                    btn_h = float(self._btn_uvs[tex_idx - 127]["h"])
+                    x = 230.0 + b * (btn_w + 4.0)
+                else:
+                    btn_w = None  # use template raw values
+                    x = 230.0 + b * 60.0
                 y = 384.0 + row_i * 24.0
                 self.state.mem.write_int(a + 0x1C, pack_f(x))
                 self.state.mem.write_int(a + 0x20, pack_f(y))
-                self.state.mem.write_int(a + 0x24, src_w)
-                self.state.mem.write_int(a + 0x28, src_h)
+                if btn_w is not None:
+                    self.state.mem.write_int(a + 0x24, pack_f(btn_w))
+                    self.state.mem.write_int(a + 0x28, pack_f(btn_h))
+                else:
+                    self.state.mem.write_int(a + 0x24, tmpl["w"])
+                    self.state.mem.write_int(a + 0x28, tmpl["h"])
 
                 # Name string: INDEX{game_row}{b}
                 name = f"INDEX{game_row}{b}".encode() + b"\x00" * 4
@@ -784,8 +833,9 @@ class App:
                 btn_ptr_off = 0x164 + game_row * 0xC + b * 4
                 self.state.mem.write_int(pine + btn_ptr_off, (a - 0x20000000))
                 part_idx += 1
-            # Clear 3rd button pointer
-            self.state.mem.write_int(pine + 0x164 + game_row * 0xC + 8, 0)
+            # Clear unused button pointers
+            for b in range(row["buttons"], 3):
+                self.state.mem.write_int(pine + 0x164 + game_row * 0xC + b * 4, 0)
 
             # Set max toggle value and config pointer
             self.state.mem.write_int(pine + 0x114 + game_row * 4, row["buttons"])
@@ -805,13 +855,23 @@ class App:
         self.state.mem.write_int(0x203769FC, v)
 
         # Write label strings (0x01F80000 + row_i * 0x80) and count
+        # Write button text strings and zero unused slots
         self.state.mem.write_int(0x21F80058, num_rows)
         for row_i, row in enumerate(self._custom_rows):
             label_base = 0x21F80000 + row_i * 0x80
             label = row["label"].encode() + b"\x00" * 8
-            for i, ch in enumerate(label[:24]):
+            for i, ch in enumerate(label[:20]):
                 self.state.mem.write_byte(label_base + i, ch)
-            self.state.mem.write_int(label_base + 0x40, 86)  # X
+            self.state.mem.write_int(label_base + 0x40, 86)  # label X
+            # Zero button text area first
+            for i in range(0x14, 0x24):
+                self.state.mem.write_byte(label_base + i, 0)
+            # Write button text strings (only if btn_text provided)
+            for b, txt in enumerate(row.get("btn_text", [])):
+                txt_off = 0x14 + b * 8
+                txt_bytes = txt.encode() + b"\x00" * 4
+                for i, ch in enumerate(txt_bytes[:8]):
+                    self.state.mem.write_byte(label_base + txt_off + i, ch)
 
         # Pre-write rect part addr + size
         mci_ps2 = self.state.mem.read_int(addr.MENU_COMMON_INFO)
@@ -821,27 +881,26 @@ class App:
             pine_rect_form = 0x20000000 + rect_form_ps2
             rect_part0_ps2 = self.state.mem.read_int(pine_rect_form + 0x6C)
             self.state.mem.write_int(0x21F70B70, rect_part0_ps2)
-            self.state.mem.write_int(0x21F70B74, pack_f(50.0))
+            self.state.mem.write_int(0x21F70B74, pack_f(50.0))  # default, poll overrides
             self.state.mem.write_int(0x21F70B78, pack_f(16.0))
 
         log.info("Injected %d custom rows (%d parts, count %d→%d)",
                  num_rows, total_new_parts, old_count, new_count)
-        # Debug: log button pointers for each custom row
-        for row_i in range(num_rows):
-            game_row = 16 + row_i
-            ptrs = []
-            for b in range(3):
-                p = self.state.mem.read_int(pine + 0x164 + game_row * 0xC + b * 4)
-                ptrs.append(f"0x{p:08X}" if p else "NULL")
-            mv = self.state.mem.read_int(pine + 0x114 + game_row * 4)
-            cv = self.state.mem.read_int(pine + 0x254 + game_row * 4)
-            log.info("  row%d: btns=[%s] max=%d cfg=0x%08X", game_row, ",".join(ptrs), mv, cv)
+
+    def _init_run_speed(self):
+        cur = self.state.mem.read_int(addr.SPEED_INSTR_MAIN)
+        speed_map = {0x40A0: 0, 0x40F0: 1, 0x4120: 2}  # 1x, 1.5x, 2x
+        for upper, idx in speed_map.items():
+            if cur == addr.speed_lui(upper):
+                return idx
+        return 0
 
     def _on_run_speed_change(self, val):
-        speed_map = {0: 0x40A0, 1: 0x40F0}
-        instr = addr.speed_lui(speed_map.get(val, 0x40A0))
+        speed_map = {0: 0x40A0, 1: 0x40F0, 2: 0x4120}
+        upper16 = speed_map.get(val, 0x40A0)
+        instr = addr.speed_lui(upper16)
         self.state.mem.write_int(addr.SPEED_INSTR_MAIN, instr)
-        labels = {0: "1x (Default)", 1: "1.5x"}
+        labels = {0: "1x (Default)", 1: "1.5x", 2: "2x"}
         if val in labels:
             self._speed_var.set(labels[val])
             settings.set("run_speed", labels[val])
@@ -852,6 +911,55 @@ class App:
         settings.set("auto_repair", enabled)
         self._auto_repair_var.set(enabled)
         self.state.mem.write_byte(addr.AUTO_REPAIR_FLAG, 1 if enabled else 0)
+
+    def _inject_btn_textures(self, cave, btn_templates):
+        """Write custom button texture patch and create TexGetInfo entries."""
+        import os, json, struct
+        tex_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                               '..', 'Textures', 'OptionsMenu')
+        patch_path = os.path.join(tex_dir, 'btn_patch.bin')
+        meta_path = os.path.join(tex_dir, 'btn_patch_meta.json')
+        if not os.path.exists(patch_path):
+            log.warning("No button texture patch found")
+            return
+        with open(patch_path, 'rb') as f:
+            patch = f.read()
+        with open(meta_path) as f:
+            meta = json.load(f)
+
+        # Write sparse patch: 'F'=full word, 'B'=single byte
+        base = 0x21B73F60
+        i = 0
+        while i < len(patch):
+            tag = chr(patch[i])
+            if tag == 'F':
+                off, val = struct.unpack_from('<II', patch, i + 1)
+                self.state.mem.write_int(base + off, val)
+                i += 9
+            elif tag == 'B':
+                off, val = struct.unpack_from('<IB', patch, i + 1)
+                self.state.mem.write_byte(base + off, val)
+                i += 6
+
+        # Create TexGetInfo entries
+        mp = self.state.mem.read_int(0x20377940)
+        pine_mp = 0x20000000 + mp
+        tgi_base = self.state.mem.read_int(pine_mp + 0x10)
+        src_tgi = 0x20000000 + tgi_base + 114 * 0x20
+
+        for i, btn in enumerate(meta["buttons"]):
+            idx = 127 + i
+            dst = 0x20000000 + tgi_base + idx * 0x20
+            for off in range(0, 0x20, 4):
+                self.state.mem.write_int(dst + off, self.state.mem.read_int(src_tgi + off))
+            self.state.mem.write_int(dst + 0x00, btn["x"])
+            self.state.mem.write_int(dst + 0x04, btn["y"])
+            self.state.mem.write_int(dst + 0x08, btn["w"])
+            self.state.mem.write_int(dst + 0x0C, btn["h"])
+
+        self._btn_uvs = meta["buttons"]
+        log.info("Injected %d custom button textures (%d pixels)",
+                 len(meta["buttons"]), len(patch) // 5)
 
     def _on_close(self):
         self.manager.stop_nowait()

@@ -2,7 +2,7 @@
 Entry point. Launches the mod window and connects to PCSX2 via PINE IPC.
 """
 
-import sys
+import os
 import signal
 from core.pine_ipc import PineIPC
 from core.memory import Memory
@@ -16,12 +16,8 @@ def main():
     state = GameState(mem)
     app = App(state)
 
-    def _quit(*args):
-        app.manager.stop_nowait()
-        app.state.mem.disconnect()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, _quit)
+    signal.signal(signal.SIGINT, lambda *_: os._exit(0))
+    signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
     app.run()
 
 

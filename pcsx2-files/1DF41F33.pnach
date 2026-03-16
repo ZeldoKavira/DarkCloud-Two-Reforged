@@ -528,9 +528,7 @@ patch=1,EE,21F70B58,extended,27BD0010
 
 // ======== 10-cursor-fix ========
 // Hook after SetWakuWH to fix cursor + rect goal position + rect size
-// Uses SetNextMovePos fields for smooth cursor animation
-// Python writes INT positions to 0x01F70B60-0x01F70B78
-// Rect size fix runs unconditionally (safe: a3=0 check skips write)
+// Only active when cursor flag (0x01F70B60) is set (cursor on custom row)
 // Hook GetEtcTblValue call at 0x002C1F48
 patch=1,EE,202C1F48,extended,0C7DC2E0
 // === Cave at 0x01F70B80 ===
@@ -539,118 +537,160 @@ patch=1,EE,21F70B84,extended,AFBF0000 // sw ra, 0(sp)
 patch=1,EE,21F70B88,extended,0C08AAEC // jal GetEtcTblValue
 patch=1,EE,21F70B8C,extended,00000000 // nop
 patch=1,EE,21F70B90,extended,3C0201F7 // lui v0, 0x01F7
-// Always fix rect part size (runs every frame, safe if a3=0)
-patch=1,EE,21F70B94,extended,8C470B70 // lw a3, 0x0B70(v0) — rect part addr
-patch=1,EE,21F70B98,extended,10E00005 // beq a3, zero, past_size (BB0)
+// Check cursor flag first
+patch=1,EE,21F70B94,extended,8C430B60 // lw v1, 0x0B60(v0) — cursor X (0=skip)
+patch=1,EE,21F70B98,extended,10600015 // beq v1, zero, epilogue (BF0)
 patch=1,EE,21F70B9C,extended,00000000 // nop
-patch=1,EE,21F70BA0,extended,8C480B74 // lw t0, 0x0B74(v0) — width
-patch=1,EE,21F70BA4,extended,ACE80024 // sw t0, 0x24(a3)
-patch=1,EE,21F70BA8,extended,8C480B78 // lw t0, 0x0B78(v0) — height
-patch=1,EE,21F70BAC,extended,ACE80028 // sw t0, 0x28(a3)
-// Check cursor flag (past_size: BB0)
-patch=1,EE,21F70BB0,extended,8C430B60 // lw v1, 0x0B60(v0) — cursor X (0=skip)
-patch=1,EE,21F70BB4,extended,1060000E // beq v1, zero, epilogue (BF0)
-patch=1,EE,21F70BB8,extended,00000000 // nop
-patch=1,EE,21F70BBC,extended,8C440B64 // cursor goal Y
-patch=1,EE,21F70BC0,extended,8C450B68 // rect goal X
-patch=1,EE,21F70BC4,extended,8C460B6C // rect goal Y
-patch=1,EE,21F70BC8,extended,8F8294F8 // lw v0, -0x6B08(gp)
-patch=1,EE,21F70BCC,extended,8C4A0138 // lw t2, 0x138(v0)
-patch=1,EE,21F70BD0,extended,8C4B013C // lw t3, 0x13C(v0)
-patch=1,EE,21F70BD4,extended,34020002 // li v0, 2
-patch=1,EE,21F70BD8,extended,A1420020 // sb v0, 0x20(t2)
-patch=1,EE,21F70BDC,extended,AD430024 // sw v1, 0x24(t2)
-patch=1,EE,21F70BE0,extended,AD440028 // sw a0, 0x28(t2)
-patch=1,EE,21F70BE4,extended,A1620020 // sb v0, 0x20(t3)
-patch=1,EE,21F70BE8,extended,AD650024 // sw a1, 0x24(t3)
-patch=1,EE,21F70BEC,extended,AD660028 // sw a2, 0x28(t3)
+// Load all targets
+patch=1,EE,21F70BA0,extended,8C440B64 // cursor goal Y
+patch=1,EE,21F70BA4,extended,8C450B68 // rect goal X
+patch=1,EE,21F70BA8,extended,8C460B6C // rect goal Y
+patch=1,EE,21F70BAC,extended,8C470B70 // rect part addr
+patch=1,EE,21F70BB0,extended,8C480B74 // rect width
+patch=1,EE,21F70BB4,extended,8C490B78 // rect height
+// Set cursor/rect goals
+patch=1,EE,21F70BB8,extended,8F8294F8 // lw v0, -0x6B08(gp)
+patch=1,EE,21F70BBC,extended,8C4A0138 // lw t2, 0x138(v0)
+patch=1,EE,21F70BC0,extended,8C4B013C // lw t3, 0x13C(v0)
+patch=1,EE,21F70BC4,extended,34020002 // li v0, 2
+patch=1,EE,21F70BC8,extended,A1420020 // sb v0, 0x20(t2)
+patch=1,EE,21F70BCC,extended,AD430024 // sw v1, 0x24(t2)
+patch=1,EE,21F70BD0,extended,AD440028 // sw a0, 0x28(t2)
+patch=1,EE,21F70BD4,extended,A1620020 // sb v0, 0x20(t3)
+patch=1,EE,21F70BD8,extended,AD650024 // sw a1, 0x24(t3)
+patch=1,EE,21F70BDC,extended,AD660028 // sw a2, 0x28(t3)
+// Fix rect part size (only when on custom row)
+// a3=rect part addr, t0=width, t1=height
+patch=1,EE,21F70BE0,extended,10E00003 // beq a3, zero, epilogue (BF0)
+patch=1,EE,21F70BE4,extended,00000000 // nop
+patch=1,EE,21F70BE8,extended,ACE80024 // sw t0, 0x24(a3) — width
+patch=1,EE,21F70BEC,extended,ACE90028 // sw t1, 0x28(a3) — height
 // Epilogue (BF0)
 patch=1,EE,21F70BF0,extended,8FBF0000 // lw ra, 0(sp)
 patch=1,EE,21F70BF4,extended,03E00008 // jr ra
 patch=1,EE,21F70BF8,extended,27BD0020 // addiu sp, 32
 
 // ======== 11-option-labels ========
-// Options screen draw hook — renders N custom option labels via CFont
-// Label count at 0x01F80058. Each label at 0x01F80000 + i*0x80:
-//   +0x00: string, +0x40: X(int), +0x44: Y(int)
-// Clip bounds (shared): 0x01F8004C=top, 0x01F80050=bottom
-// Patch drawfunctbl[7]
+// Options screen draw hook — renders N custom labels + button text via CFont
+// Row count at 0x01F80058. Per row at 0x01F80000 + i*0x80:
+//   +0x00: label string (20 bytes)
+//   +0x14: btn0 text (8 bytes), +0x1C: btn1 text (8 bytes)
+//   +0x40: label X, +0x44: label Y
+//   +0x48: btn0 X, +0x4C: btn0 Y, +0x50: btn1 X, +0x54: btn1 Y
+// Clip: 0x01F8004C=top, 0x01F80050=bottom
+// Labels: gray text, fuchi=5, size 16/20
+// Button text: white text, fuchi=7, size 11/14
 patch=1,EE,2035099C,extended,01F70E00
-// Persist label X (set by Python per-label, but default here)
 patch=1,EE,21F80040,extended,00000056
-// === Draw cave at 0x01F70E00 ===
 // Prologue
-patch=1,EE,21F70E00,extended,27BDFFC0 // addiu sp, -64
-patch=1,EE,21F70E04,extended,AFBF0000 // sw ra, 0(sp)
-patch=1,EE,21F70E08,extended,AFB00004 // sw s0, 4(sp)
-patch=1,EE,21F70E0C,extended,AFB10008 // sw s1, 8(sp)
-patch=1,EE,21F70E10,extended,AFB2000C // sw s2, 12(sp)
-patch=1,EE,21F70E14,extended,AFB30010 // sw s3, 16(sp)
-// FormDraw(MenuPosData)
-patch=1,EE,21F70E18,extended,8F849450 // lw a0, -0x6BB0(gp)
-patch=1,EE,21F70E1C,extended,0C08AD0C // jal FormDraw
-patch=1,EE,21F70E20,extended,00000000 // nop
+patch=1,EE,21F70E00,extended,27BDFFC0
+patch=1,EE,21F70E04,extended,AFBF0000
+patch=1,EE,21F70E08,extended,AFB00004
+patch=1,EE,21F70E0C,extended,AFB10008
+patch=1,EE,21F70E10,extended,AFB2000C
+patch=1,EE,21F70E14,extended,AFB30010
+// FormDraw
+patch=1,EE,21F70E18,extended,8F849450
+patch=1,EE,21F70E1C,extended,0C08AD0C
+patch=1,EE,21F70E20,extended,00000000
 // Setup
-patch=1,EE,21F70E24,extended,3C1001F8 // lui s0, 0x01F8
-patch=1,EE,21F70E28,extended,8E110058 // lw s1, 0x58(s0)  ; label count
-patch=1,EE,21F70E2C,extended,1220002A // beq s1, zero, epilogue (ED8)
-patch=1,EE,21F70E30,extended,00000000 // nop
-patch=1,EE,21F70E34,extended,8E12004C // lw s2, 0x4C(s0)  ; clip_top
-patch=1,EE,21F70E38,extended,8E130050 // lw s3, 0x50(s0)  ; clip_bottom
-// Loop (E3C):
-patch=1,EE,21F70E3C,extended,92020000 // lbu v0, 0(s0)    ; label byte 0
-patch=1,EE,21F70E40,extended,10400021 // beq v0, zero, skip (EC8)
-patch=1,EE,21F70E44,extended,00000000 // nop
-patch=1,EE,21F70E48,extended,8E070044 // lw a3, 0x44(s0)  ; Y
-patch=1,EE,21F70E4C,extended,00F2182A // slt v1, a3, s2   ; Y < clip_top?
-patch=1,EE,21F70E50,extended,1460001D // bne v1, zero, skip (EC8)
-patch=1,EE,21F70E54,extended,00F3182A // slt v1, a3, s3   ; Y < clip_bottom? (delay)
-patch=1,EE,21F70E58,extended,1060001B // beq v1, zero, skip (EC8)
-patch=1,EE,21F70E5C,extended,00000000 // nop
-patch=1,EE,21F70E60,extended,AFA70014 // sw a3, 0x14(sp)  ; save Y
-// SetFuchi(CFont, 5)
+patch=1,EE,21F70E24,extended,3C1001F8
+patch=1,EE,21F70E28,extended,8E110058
+patch=1,EE,21F70E2C,extended,1220004F // beq s1,zero,ep (F6C)
+patch=1,EE,21F70E30,extended,00000000
+patch=1,EE,21F70E34,extended,8E12004C
+patch=1,EE,21F70E38,extended,8E130050
+// Loop (E3C)
+patch=1,EE,21F70E3C,extended,92020000
+patch=1,EE,21F70E40,extended,10400046 // beq v0,zero,skip (F5C)
+patch=1,EE,21F70E44,extended,00000000
+patch=1,EE,21F70E48,extended,8E070044
+patch=1,EE,21F70E4C,extended,00F2182A
+patch=1,EE,21F70E50,extended,14600042 // bne v1,zero,skip
+patch=1,EE,21F70E54,extended,00F3182A
+patch=1,EE,21F70E58,extended,10600040 // beq v1,zero,skip
+patch=1,EE,21F70E5C,extended,00000000
+patch=1,EE,21F70E60,extended,AFA70018
+// Label font setup: fuchi=5, size=16/20, color=gray
 patch=1,EE,21F70E64,extended,3C04003E
 patch=1,EE,21F70E68,extended,24848090
-patch=1,EE,21F70E6C,extended,0C0B515C // jal SetFuchi
+patch=1,EE,21F70E6C,extended,0C0B515C
 patch=1,EE,21F70E70,extended,34050005
-// SetDrawSize(CFont, 16, 20)
 patch=1,EE,21F70E74,extended,3C04003E
 patch=1,EE,21F70E78,extended,24848090
 patch=1,EE,21F70E7C,extended,34050010
-patch=1,EE,21F70E80,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F70E80,extended,0C0B5128
 patch=1,EE,21F70E84,extended,34060014
-// SetClearance(CFont, 16, 20)
 patch=1,EE,21F70E88,extended,3C04003E
 patch=1,EE,21F70E8C,extended,24848090
 patch=1,EE,21F70E90,extended,34050010
-patch=1,EE,21F70E94,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70E94,extended,0C0B512C
 patch=1,EE,21F70E98,extended,34060014
-// SetColor(CFont, 0x80686A6B)
 patch=1,EE,21F70E9C,extended,3C04003E
 patch=1,EE,21F70EA0,extended,24848090
 patch=1,EE,21F70EA4,extended,3C058068
-patch=1,EE,21F70EA8,extended,0C0B5148 // jal SetColor_Ui
+patch=1,EE,21F70EA8,extended,0C0B5148
 patch=1,EE,21F70EAC,extended,34A56A6B
-// DrawDirect(CFont, label, X, Y)
+// DrawDirect label
 patch=1,EE,21F70EB0,extended,3C04003E
 patch=1,EE,21F70EB4,extended,24848090
-patch=1,EE,21F70EB8,extended,26050000 // addiu a1, s0, 0  ; label str
-patch=1,EE,21F70EBC,extended,8E060040 // lw a2, 0x40(s0)  ; X
-patch=1,EE,21F70EC0,extended,0C0B5688 // jal DrawDirect
-patch=1,EE,21F70EC4,extended,8FA70014 // lw a3, 0x14(sp)  ; Y (delay)
-// Skip (EC8): advance to next label
-patch=1,EE,21F70EC8,extended,26100080 // addiu s0, 0x80
-patch=1,EE,21F70ECC,extended,2631FFFF // addiu s1, -1
-patch=1,EE,21F70ED0,extended,1620FFDA // bne s1, zero, loop (E3C)
-patch=1,EE,21F70ED4,extended,00000000 // nop
-// Epilogue (ED8)
-patch=1,EE,21F70ED8,extended,8FB30010 // lw s3, 16(sp)
-patch=1,EE,21F70EDC,extended,8FB2000C // lw s2, 12(sp)
-patch=1,EE,21F70EE0,extended,8FB10008 // lw s1, 8(sp)
-patch=1,EE,21F70EE4,extended,8FB00004 // lw s0, 4(sp)
-patch=1,EE,21F70EE8,extended,8FBF0000 // lw ra, 0(sp)
-patch=1,EE,21F70EEC,extended,03E00008 // jr ra
-patch=1,EE,21F70EF0,extended,27BD0040 // addiu sp, 64
+patch=1,EE,21F70EB8,extended,26050000
+patch=1,EE,21F70EBC,extended,8E060040
+patch=1,EE,21F70EC0,extended,0C0B5688
+patch=1,EE,21F70EC4,extended,8FA70018
+// Button font setup: fuchi=7, size=11/14, color=white
+patch=1,EE,21F70EC8,extended,3C04003E
+patch=1,EE,21F70ECC,extended,24848090
+patch=1,EE,21F70ED0,extended,0C0B515C // SetFuchi
+patch=1,EE,21F70ED4,extended,34050007 // fuchi=7
+patch=1,EE,21F70ED8,extended,3C04003E
+patch=1,EE,21F70EDC,extended,24848090
+patch=1,EE,21F70EE0,extended,3405000B // size=11
+patch=1,EE,21F70EE4,extended,0C0B5128 // SetDrawSize
+patch=1,EE,21F70EE8,extended,3406000E // 14
+patch=1,EE,21F70EEC,extended,3C04003E
+patch=1,EE,21F70EF0,extended,24848090
+patch=1,EE,21F70EF4,extended,3405000B
+patch=1,EE,21F70EF8,extended,0C0B512C // SetClearance
+patch=1,EE,21F70EFC,extended,3406000E
+patch=1,EE,21F70F00,extended,3C04003E
+patch=1,EE,21F70F04,extended,24848090
+patch=1,EE,21F70F08,extended,3C0580FF // color=0x80FFFFFF (white)
+patch=1,EE,21F70F0C,extended,0C0B5148 // SetColor
+patch=1,EE,21F70F10,extended,34A5FFFF
+// btn0 text
+patch=1,EE,21F70F14,extended,92020014
+patch=1,EE,21F70F18,extended,10400007 // beq v0,zero,btn1 (F38)
+patch=1,EE,21F70F1C,extended,00000000
+patch=1,EE,21F70F20,extended,3C04003E
+patch=1,EE,21F70F24,extended,24848090
+patch=1,EE,21F70F28,extended,26050014
+patch=1,EE,21F70F2C,extended,8E060048
+patch=1,EE,21F70F30,extended,0C0B5688
+patch=1,EE,21F70F34,extended,8E07004C
+// btn1 text (F38)
+patch=1,EE,21F70F38,extended,9202001C
+patch=1,EE,21F70F3C,extended,10400007 // beq v0,zero,skip (F5C)
+patch=1,EE,21F70F40,extended,00000000
+patch=1,EE,21F70F44,extended,3C04003E
+patch=1,EE,21F70F48,extended,24848090
+patch=1,EE,21F70F4C,extended,2605001C
+patch=1,EE,21F70F50,extended,8E060050
+patch=1,EE,21F70F54,extended,0C0B5688
+patch=1,EE,21F70F58,extended,8E070054
+// Skip (F5C)
+patch=1,EE,21F70F5C,extended,26100080
+patch=1,EE,21F70F60,extended,2631FFFF
+patch=1,EE,21F70F64,extended,1620FFB5 // bne s1,zero,loop (E3C)
+patch=1,EE,21F70F68,extended,00000000
+// Epilogue (F6C)
+patch=1,EE,21F70F6C,extended,8FB30010
+patch=1,EE,21F70F70,extended,8FB2000C
+patch=1,EE,21F70F74,extended,8FB10008
+patch=1,EE,21F70F78,extended,8FB00004
+patch=1,EE,21F70F7C,extended,8FBF0000
+patch=1,EE,21F70F80,extended,03E00008
+patch=1,EE,21F70F84,extended,27BD0040
 
 // ======== 12-auto-key ========
 // Auto Key — automatically uses dungeon key on locked door when pressing X

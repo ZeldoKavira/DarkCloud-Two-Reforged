@@ -1,7 +1,5 @@
 // Hook after SetWakuWH to fix cursor + rect goal position + rect size
-// Uses SetNextMovePos fields for smooth cursor animation
-// Python writes INT positions to 0x01F70B60-0x01F70B78
-// Rect size fix runs unconditionally (safe: a3=0 check skips write)
+// Only active when cursor flag (0x01F70B60) is set (cursor on custom row)
 
 // Hook GetEtcTblValue call at 0x002C1F48
 patch=1,EE,202C1F48,extended,0C7DC2E0
@@ -14,37 +12,37 @@ patch=1,EE,21F70B8C,extended,00000000 // nop
 
 patch=1,EE,21F70B90,extended,3C0201F7 // lui v0, 0x01F7
 
-// Always fix rect part size (runs every frame, safe if a3=0)
-patch=1,EE,21F70B94,extended,8C470B70 // lw a3, 0x0B70(v0) — rect part addr
-patch=1,EE,21F70B98,extended,10E00005 // beq a3, zero, past_size (BB0)
+// Check cursor flag first
+patch=1,EE,21F70B94,extended,8C430B60 // lw v1, 0x0B60(v0) — cursor X (0=skip)
+patch=1,EE,21F70B98,extended,10600015 // beq v1, zero, epilogue (BF0)
 patch=1,EE,21F70B9C,extended,00000000 // nop
-patch=1,EE,21F70BA0,extended,8C480B74 // lw t0, 0x0B74(v0) — width
-patch=1,EE,21F70BA4,extended,ACE80024 // sw t0, 0x24(a3)
-patch=1,EE,21F70BA8,extended,8C480B78 // lw t0, 0x0B78(v0) — height
-patch=1,EE,21F70BAC,extended,ACE80028 // sw t0, 0x28(a3)
 
-// Check cursor flag (past_size: BB0)
-patch=1,EE,21F70BB0,extended,8C430B60 // lw v1, 0x0B60(v0) — cursor X (0=skip)
-patch=1,EE,21F70BB4,extended,1060000E // beq v1, zero, epilogue (BF0)
-patch=1,EE,21F70BB8,extended,00000000 // nop
+// Load all targets
+patch=1,EE,21F70BA0,extended,8C440B64 // cursor goal Y
+patch=1,EE,21F70BA4,extended,8C450B68 // rect goal X
+patch=1,EE,21F70BA8,extended,8C460B6C // rect goal Y
+patch=1,EE,21F70BAC,extended,8C470B70 // rect part addr
+patch=1,EE,21F70BB0,extended,8C480B74 // rect width
+patch=1,EE,21F70BB4,extended,8C490B78 // rect height
 
-patch=1,EE,21F70BBC,extended,8C440B64 // cursor goal Y
-patch=1,EE,21F70BC0,extended,8C450B68 // rect goal X
-patch=1,EE,21F70BC4,extended,8C460B6C // rect goal Y
+// Set cursor/rect goals
+patch=1,EE,21F70BB8,extended,8F8294F8 // lw v0, -0x6B08(gp)
+patch=1,EE,21F70BBC,extended,8C4A0138 // lw t2, 0x138(v0)
+patch=1,EE,21F70BC0,extended,8C4B013C // lw t3, 0x13C(v0)
+patch=1,EE,21F70BC4,extended,34020002 // li v0, 2
+patch=1,EE,21F70BC8,extended,A1420020 // sb v0, 0x20(t2)
+patch=1,EE,21F70BCC,extended,AD430024 // sw v1, 0x24(t2)
+patch=1,EE,21F70BD0,extended,AD440028 // sw a0, 0x28(t2)
+patch=1,EE,21F70BD4,extended,A1620020 // sb v0, 0x20(t3)
+patch=1,EE,21F70BD8,extended,AD650024 // sw a1, 0x24(t3)
+patch=1,EE,21F70BDC,extended,AD660028 // sw a2, 0x28(t3)
 
-patch=1,EE,21F70BC8,extended,8F8294F8 // lw v0, -0x6B08(gp)
-patch=1,EE,21F70BCC,extended,8C4A0138 // lw t2, 0x138(v0)
-patch=1,EE,21F70BD0,extended,8C4B013C // lw t3, 0x13C(v0)
-
-patch=1,EE,21F70BD4,extended,34020002 // li v0, 2
-
-patch=1,EE,21F70BD8,extended,A1420020 // sb v0, 0x20(t2)
-patch=1,EE,21F70BDC,extended,AD430024 // sw v1, 0x24(t2)
-patch=1,EE,21F70BE0,extended,AD440028 // sw a0, 0x28(t2)
-
-patch=1,EE,21F70BE4,extended,A1620020 // sb v0, 0x20(t3)
-patch=1,EE,21F70BE8,extended,AD650024 // sw a1, 0x24(t3)
-patch=1,EE,21F70BEC,extended,AD660028 // sw a2, 0x28(t3)
+// Fix rect part size (only when on custom row)
+// a3=rect part addr, t0=width, t1=height
+patch=1,EE,21F70BE0,extended,10E00003 // beq a3, zero, epilogue (BF0)
+patch=1,EE,21F70BE4,extended,00000000 // nop
+patch=1,EE,21F70BE8,extended,ACE80024 // sw t0, 0x24(a3) — width
+patch=1,EE,21F70BEC,extended,ACE90028 // sw t1, 0x28(a3) — height
 
 // Epilogue (BF0)
 patch=1,EE,21F70BF0,extended,8FBF0000 // lw ra, 0(sp)
