@@ -1,7 +1,7 @@
 // Options screen draw hook — renders N custom labels + button text via CFont
 // Row count at 0x01F80058. Per row at 0x01F80000 + i*0x80:
-//   +0x00: label string (20 bytes)
-//   +0x14: btn0 text (8 bytes), +0x1C: btn1 text (8 bytes)
+//   +0x00: label string (36 bytes)
+//   +0x24: btn0 text (8 bytes), +0x2C: btn1 text (8 bytes)
 //   +0x40: label X, +0x44: label Y
 //   +0x48: btn0 X, +0x4C: btn0 Y, +0x50: btn1 X, +0x54: btn1 Y
 // Clip: 0x01F8004C=top, 0x01F80050=bottom
@@ -88,22 +88,22 @@ patch=1,EE,21F70F08,extended,3C0580FF // color=0x80FFFFFF (white)
 patch=1,EE,21F70F0C,extended,0C0B5148 // SetColor
 patch=1,EE,21F70F10,extended,34A5FFFF
 // btn0 text
-patch=1,EE,21F70F14,extended,92020014
+patch=1,EE,21F70F14,extended,92020024
 patch=1,EE,21F70F18,extended,10400007 // beq v0,zero,btn1 (F38)
 patch=1,EE,21F70F1C,extended,00000000
 patch=1,EE,21F70F20,extended,3C04003E
 patch=1,EE,21F70F24,extended,24848090
-patch=1,EE,21F70F28,extended,26050014
+patch=1,EE,21F70F28,extended,26050024
 patch=1,EE,21F70F2C,extended,8E060048
 patch=1,EE,21F70F30,extended,0C0B5688
 patch=1,EE,21F70F34,extended,8E07004C
 // btn1 text (F38)
-patch=1,EE,21F70F38,extended,9202001C
+patch=1,EE,21F70F38,extended,9202002C
 patch=1,EE,21F70F3C,extended,10400007 // beq v0,zero,skip (F5C)
 patch=1,EE,21F70F40,extended,00000000
 patch=1,EE,21F70F44,extended,3C04003E
 patch=1,EE,21F70F48,extended,24848090
-patch=1,EE,21F70F4C,extended,2605001C
+patch=1,EE,21F70F4C,extended,2605002C
 patch=1,EE,21F70F50,extended,8E060050
 patch=1,EE,21F70F54,extended,0C0B5688
 patch=1,EE,21F70F58,extended,8E070054

@@ -1,5 +1,9 @@
 [
-  {"text": "1x",   "size": "small", "font_size": 24},
-  {"text": "1.5x", "size": "small", "font_size": 20},
-  {"text": "2x",   "size": "small", "font_size": 24}
+  {"text": "1x",      "size": "small"},
+  {"text": "1.5x",    "size": "small"},
+  {"text": "2x",      "size": "small"},
+  {"text": "Off",     "size": "small"},
+  {"text": "Left",    "size": "small"},
+  {"text": "Right",   "size": "small"},
+  {"text": "5x",      "size": "small"}
 ]

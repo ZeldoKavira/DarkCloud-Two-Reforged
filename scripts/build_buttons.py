@@ -20,10 +20,11 @@ Writes:
 """
 
 import json, os, struct
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TEX_DIR = os.path.join(SCRIPT_DIR, '..', 'Textures', 'OptionsMenu')
+FONT_ATLAS = os.path.join(TEX_DIR, 'dc2_font_atlas.png')
 
 BG = 0x6F
 TEXT = 0xFF
@@ -32,6 +33,36 @@ CUSTOM_Y = 200  # Well below native buttons (last native ~y=168)
 
 LARGE_BTN = (56, 24)
 SMALL_BTN = (36, 24)
+
+# DC2 font atlas constants
+CELL_W, CELL_H = 16, 20
+BOLD_MAP = {}
+for i in range(8):
+    BOLD_MAP[chr(0x30 + i)] = ((24 + i) * 16, 80)
+BOLD_MAP['8'] = (0, 100)
+BOLD_MAP['9'] = (16, 100)
+for i in range(26):
+    BOLD_MAP[chr(0x41 + i)] = ((2 + i) * 16, 100)
+BOLD_MAP[' '] = (0, 0)
+BOLD_MAP['.'] = (14 * 16, 0)  # Period from regular font row
+
+_font_atlas = None
+def get_font_atlas():
+    global _font_atlas
+    if _font_atlas is None:
+        _font_atlas = Image.open(FONT_ATLAS)
+    return _font_atlas
+
+def get_bold_glyph(ch):
+    ch = ch.upper()
+    if ch not in BOLD_MAP:
+        return Image.new('RGBA', (CELL_W, CELL_H), (0,0,0,0))
+    x, y = BOLD_MAP[ch]
+    atlas = get_font_atlas()
+    g = atlas.crop((x, y, x + CELL_W, y + CELL_H))
+    r, gr, b, a = g.split()
+    a = a.point(lambda p: 255 if p > 10 else 0)
+    return Image.merge('RGBA', (r, gr, b, a))
 
 def swizzle_offset(x, y, w=256):
     """Get the byte offset in swizzled data for pixel (x,y)."""
@@ -52,54 +83,77 @@ def swizzle_8bpp(linear, w, h):
                 out[idx] = linear[y * w + x]
     return out
 
-def find_bold_font():
-    for fpath in [
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    ]:
-        if os.path.exists(fpath):
-            return fpath
-    return None
-
-def render_text_mask(text, w, h, font_size):
-    s = 2
-    img = Image.new('L', (w * s, h * s), 0)
-    draw = ImageDraw.Draw(img)
-    fpath = find_bold_font()
-    font = ImageFont.truetype(fpath, font_size) if fpath else ImageFont.load_default()
-    bb = draw.textbbox((0, 0), text, font=font)
-    tw, th = bb[2] - bb[0], bb[3] - bb[1]
-    tx = (w * s - tw) // 2 - bb[0]
-    ty = (h * s - th) // 2 - bb[1]
-    for dx in [-1, 0, 1]:
-        for dy in [-1, 0, 1]:
-            draw.text((tx + dx, ty + dy), text, fill=255, font=font)
-    img = img.resize((w, h), Image.LANCZOS)
-    return [[img.getpixel((x, y)) for x in range(w)] for y in range(h)]
+def render_dc2_text(text, btn_w, btn_h):
+    """Render text using DC2 font atlas, return RGBA image sized for button."""
+    text = text.upper()
+    
+    # Get glyphs with tight horizontal crop
+    glyphs = []
+    for ch in text:
+        g = get_bold_glyph(ch)
+        bbox = g.split()[3].getbbox()
+        if bbox:
+            glyphs.append(g.crop((bbox[0], 0, bbox[2], CELL_H)))
+        else:
+            glyphs.append(Image.new('RGBA', (4, CELL_H), (0,0,0,0)))  # space
+    
+    # Compose with 1px spacing
+    spacing = 1
+    total_w = sum(g.width for g in glyphs) + spacing * (len(glyphs) - 1)
+    
+    text_img = Image.new('RGBA', (total_w, CELL_H), (0,0,0,0))
+    cx = 0
+    for g in glyphs:
+        text_img.paste(g, (cx, 0), g.split()[3])
+        cx += g.width + spacing
+    
+    # Scale to fit button with padding
+    max_w = btn_w - 8
+    max_h = btn_h - 6
+    scale_w = max_w / total_w if total_w > max_w else 1.0
+    scale_h = max_h / CELL_H if CELL_H > max_h else 1.0
+    scale = min(scale_w, scale_h, 0.75)
+    
+    new_w, new_h = int(total_w * scale), int(CELL_H * scale)
+    return text_img.resize((new_w, new_h), Image.NEAREST)
 
 def load_template(size):
     name = 'blank_button_template.png' if size == LARGE_BTN else 'blank_small_36x24.png'
     img = Image.open(os.path.join(TEX_DIR, name)).convert('L')
     return [[img.getpixel((x, y)) for x in range(size[0])] for y in range(size[1])]
 
-def make_button(text, size, font_size):
+def make_button(text, size, font_size=None):
     w, h = size
     template = load_template(size)
-    mask = render_text_mask(text, w, h, font_size)
+    
+    # Render DC2 font text
+    text_comp = render_dc2_text(text, w, h)
+    
+    # Center horizontally, down 1px from center
+    tx = (w - text_comp.width) // 2
+    ty = (h - text_comp.height) // 2 + 1
+    
+    # Build grayscale button
     btn = [row[:] for row in template]
-    for y in range(1, h):
-        for x in range(1, w):
-            a = mask[y - 1][x - 1]
-            if a > 30:
-                btn[y][x] = int(btn[y][x] * (1 - min(a / 255, 1) * 0.7))
-    for y in range(h):
-        for x in range(w):
-            a = mask[y][x]
-            if a > 30:
-                t = a / 255
-                btn[y][x] = int(BG * (1 - t) + TEXT * t)
+    
+    # Shadow pass (offset by 1,1)
+    for cy in range(text_comp.height):
+        for cx in range(text_comp.width):
+            bx, by = tx + cx + 1, ty + cy + 1
+            if 0 <= bx < w and 0 <= by < h:
+                _, _, _, a = text_comp.getpixel((cx, cy))
+                if a > 128:
+                    btn[by][bx] = int(btn[by][bx] * 0.3)  # darken for shadow
+    
+    # White text pass
+    for cy in range(text_comp.height):
+        for cx in range(text_comp.width):
+            bx, by = tx + cx, ty + cy
+            if 0 <= bx < w and 0 <= by < h:
+                _, _, _, a = text_comp.getpixel((cx, cy))
+                if a > 128:
+                    btn[by][bx] = TEXT  # pure white
+    
     return btn
 
 def main():
@@ -175,14 +229,15 @@ def main():
         f.write(patch_data)
     print(f"Saved patch: {out_path} ({len(pixel_map)} pixels, {len(patch_data)} bytes)")
 
-    # Preview
-    preview = Image.new('L', (ATLAS_W, 32), BG)
+    # Preview - calculate height needed
+    max_y = max(uv["y"] + uv["h"] for uv in uvs) - CUSTOM_Y
+    preview = Image.new('L', (ATLAS_W, max_y), BG)
     for uv, bd in zip(uvs, config):
         size = LARGE_BTN if bd["size"] == "large" else SMALL_BTN
-        btn = make_button(bd["text"], size, bd.get("font_size", 24))
+        btn = make_button(bd["text"], size)
         for by in range(size[1]):
             for bx in range(size[0]):
-                preview.putpixel((uv["x"] + bx, by), btn[by][bx])
+                preview.putpixel((uv["x"] + bx, uv["y"] - CUSTOM_Y + by), btn[by][bx])
     preview.save(os.path.join(TEX_DIR, 'btn_patch_preview.png'))
 
     meta = {"atlas_base": "0x01B73F60", "buttons": uvs}

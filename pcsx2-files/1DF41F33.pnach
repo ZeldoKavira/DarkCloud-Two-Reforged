@@ -527,54 +527,45 @@ patch=1,EE,21F70B54,extended,03E00008
 patch=1,EE,21F70B58,extended,27BD0010
 
 // ======== 10-cursor-fix ========
-// Hook after SetWakuWH to fix cursor + rect goal position + rect size
-// Only active when cursor flag (0x01F70B60) is set (cursor on custom row)
-// Hook GetEtcTblValue call at 0x002C1F48
 patch=1,EE,202C1F48,extended,0C7DC2E0
-// === Cave at 0x01F70B80 ===
-patch=1,EE,21F70B80,extended,27BDFFE0 // addiu sp, -32
-patch=1,EE,21F70B84,extended,AFBF0000 // sw ra, 0(sp)
-patch=1,EE,21F70B88,extended,0C08AAEC // jal GetEtcTblValue
-patch=1,EE,21F70B8C,extended,00000000 // nop
-patch=1,EE,21F70B90,extended,3C0201F7 // lui v0, 0x01F7
-// Check cursor flag first
-patch=1,EE,21F70B94,extended,8C430B60 // lw v1, 0x0B60(v0) — cursor X (0=skip)
-patch=1,EE,21F70B98,extended,10600015 // beq v1, zero, epilogue (BF0)
-patch=1,EE,21F70B9C,extended,00000000 // nop
-// Load all targets
-patch=1,EE,21F70BA0,extended,8C440B64 // cursor goal Y
-patch=1,EE,21F70BA4,extended,8C450B68 // rect goal X
-patch=1,EE,21F70BA8,extended,8C460B6C // rect goal Y
-patch=1,EE,21F70BAC,extended,8C470B70 // rect part addr
-patch=1,EE,21F70BB0,extended,8C480B74 // rect width
-patch=1,EE,21F70BB4,extended,8C490B78 // rect height
-// Set cursor/rect goals
-patch=1,EE,21F70BB8,extended,8F8294F8 // lw v0, -0x6B08(gp)
-patch=1,EE,21F70BBC,extended,8C4A0138 // lw t2, 0x138(v0)
-patch=1,EE,21F70BC0,extended,8C4B013C // lw t3, 0x13C(v0)
-patch=1,EE,21F70BC4,extended,34020002 // li v0, 2
-patch=1,EE,21F70BC8,extended,A1420020 // sb v0, 0x20(t2)
-patch=1,EE,21F70BCC,extended,AD430024 // sw v1, 0x24(t2)
-patch=1,EE,21F70BD0,extended,AD440028 // sw a0, 0x28(t2)
-patch=1,EE,21F70BD4,extended,A1620020 // sb v0, 0x20(t3)
-patch=1,EE,21F70BD8,extended,AD650024 // sw a1, 0x24(t3)
-patch=1,EE,21F70BDC,extended,AD660028 // sw a2, 0x28(t3)
-// Fix rect part size (only when on custom row)
-// a3=rect part addr, t0=width, t1=height
-patch=1,EE,21F70BE0,extended,10E00003 // beq a3, zero, epilogue (BF0)
-patch=1,EE,21F70BE4,extended,00000000 // nop
-patch=1,EE,21F70BE8,extended,ACE80024 // sw t0, 0x24(a3) — width
-patch=1,EE,21F70BEC,extended,ACE90028 // sw t1, 0x28(a3) — height
-// Epilogue (BF0)
-patch=1,EE,21F70BF0,extended,8FBF0000 // lw ra, 0(sp)
-patch=1,EE,21F70BF4,extended,03E00008 // jr ra
-patch=1,EE,21F70BF8,extended,27BD0020 // addiu sp, 32
+patch=1,EE,202C1F7C,extended,00000000
+patch=1,EE,21F70B80,extended,27BDFFE0
+patch=1,EE,21F70B84,extended,AFBF0000
+patch=1,EE,21F70B88,extended,0C08AAEC
+patch=1,EE,21F70B8C,extended,00000000
+patch=1,EE,21F70B90,extended,3C0201F7
+patch=1,EE,21F70B94,extended,8C430B60
+patch=1,EE,21F70B98,extended,10600015
+patch=1,EE,21F70B9C,extended,00000000
+patch=1,EE,21F70BA0,extended,8C440B64
+patch=1,EE,21F70BA4,extended,8C450B68
+patch=1,EE,21F70BA8,extended,8C460B6C
+patch=1,EE,21F70BAC,extended,8C470B70
+patch=1,EE,21F70BB0,extended,8C480B74
+patch=1,EE,21F70BB4,extended,8C490B78
+patch=1,EE,21F70BB8,extended,8F8294F8
+patch=1,EE,21F70BBC,extended,8C4A0138
+patch=1,EE,21F70BC0,extended,8C4B013C
+patch=1,EE,21F70BC4,extended,34020004
+patch=1,EE,21F70BC8,extended,A1420020
+patch=1,EE,21F70BCC,extended,AD430024
+patch=1,EE,21F70BD0,extended,AD440028
+patch=1,EE,21F70BD4,extended,A1620020
+patch=1,EE,21F70BD8,extended,AD650024
+patch=1,EE,21F70BDC,extended,AD660028
+patch=1,EE,21F70BE0,extended,10E00003
+patch=1,EE,21F70BE4,extended,00000000
+patch=1,EE,21F70BE8,extended,ACE80024
+patch=1,EE,21F70BEC,extended,ACE90028
+patch=1,EE,21F70BF0,extended,8FBF0000
+patch=1,EE,21F70BF4,extended,03E00008
+patch=1,EE,21F70BF8,extended,27BD0020
 
 // ======== 11-option-labels ========
 // Options screen draw hook — renders N custom labels + button text via CFont
 // Row count at 0x01F80058. Per row at 0x01F80000 + i*0x80:
-//   +0x00: label string (20 bytes)
-//   +0x14: btn0 text (8 bytes), +0x1C: btn1 text (8 bytes)
+//   +0x00: label string (36 bytes)
+//   +0x24: btn0 text (8 bytes), +0x2C: btn1 text (8 bytes)
 //   +0x40: label X, +0x44: label Y
 //   +0x48: btn0 X, +0x4C: btn0 Y, +0x50: btn1 X, +0x54: btn1 Y
 // Clip: 0x01F8004C=top, 0x01F80050=bottom
@@ -659,22 +650,22 @@ patch=1,EE,21F70F08,extended,3C0580FF // color=0x80FFFFFF (white)
 patch=1,EE,21F70F0C,extended,0C0B5148 // SetColor
 patch=1,EE,21F70F10,extended,34A5FFFF
 // btn0 text
-patch=1,EE,21F70F14,extended,92020014
+patch=1,EE,21F70F14,extended,92020024
 patch=1,EE,21F70F18,extended,10400007 // beq v0,zero,btn1 (F38)
 patch=1,EE,21F70F1C,extended,00000000
 patch=1,EE,21F70F20,extended,3C04003E
 patch=1,EE,21F70F24,extended,24848090
-patch=1,EE,21F70F28,extended,26050014
+patch=1,EE,21F70F28,extended,26050024
 patch=1,EE,21F70F2C,extended,8E060048
 patch=1,EE,21F70F30,extended,0C0B5688
 patch=1,EE,21F70F34,extended,8E07004C
 // btn1 text (F38)
-patch=1,EE,21F70F38,extended,9202001C
+patch=1,EE,21F70F38,extended,9202002C
 patch=1,EE,21F70F3C,extended,10400007 // beq v0,zero,skip (F5C)
 patch=1,EE,21F70F40,extended,00000000
 patch=1,EE,21F70F44,extended,3C04003E
 patch=1,EE,21F70F48,extended,24848090
-patch=1,EE,21F70F4C,extended,2605001C
+patch=1,EE,21F70F4C,extended,2605002C
 patch=1,EE,21F70F50,extended,8E060050
 patch=1,EE,21F70F54,extended,0C0B5688
 patch=1,EE,21F70F58,extended,8E070054
