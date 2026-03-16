@@ -1,46 +1,52 @@
-// Hook after SetWakuWH to fix cursor + rect position + rect size
-// Hooks GetEtcTblValue call at 0x002C1F48 (runs after SetWakuWH)
-// Python writes to 0x01F70B60-0x01F70B78
+// Hook after SetWakuWH to fix cursor + rect goal position + rect size
+// Uses SetNextMovePos fields for smooth cursor animation
+// Python writes INT positions to 0x01F70B60-0x01F70B78
+// Rect size fix runs unconditionally (safe: a3=0 check skips write)
 
-// Hook
+// Hook GetEtcTblValue call at 0x002C1F48
 patch=1,EE,202C1F48,extended,0C7DC2E0
 
 // === Cave at 0x01F70B80 ===
 patch=1,EE,21F70B80,extended,27BDFFE0 // addiu sp, -32
 patch=1,EE,21F70B84,extended,AFBF0000 // sw ra, 0(sp)
-// Call original GetEtcTblValue — a0-a3 set by caller + delay slot
-patch=1,EE,21F70B88,extended,0C08AAEC // jal GetEtcTblValue (0x0022ABB0)
+patch=1,EE,21F70B88,extended,0C08AAEC // jal GetEtcTblValue
 patch=1,EE,21F70B8C,extended,00000000 // nop
 
-// Check flag
 patch=1,EE,21F70B90,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F70B94,extended,8C430B60 // lw v1, 0x0B60(v0) — cursor X (0=skip)
-// beq v1, zero, epilogue (0xBDC). offset=(BDC-B9C)/4=16
-patch=1,EE,21F70B98,extended,10600010
-patch=1,EE,21F70B9C,extended,00000000 // nop
-// Load targets
-patch=1,EE,21F70BA0,extended,8C440B64 // cursor Y
-patch=1,EE,21F70BA4,extended,8C450B68 // rect X
-patch=1,EE,21F70BA8,extended,8C460B6C // rect Y
-patch=1,EE,21F70BAC,extended,8C470B70 // rect part addr
-patch=1,EE,21F70BB0,extended,8C480B74 // rect width
-patch=1,EE,21F70BB4,extended,8C490B78 // rect height
-// Load MenuCommonInfo
-patch=1,EE,21F70BB8,extended,8F8294F8 // lw v0, -0x6B08(gp)
-// Load form pointers
-patch=1,EE,21F70BBC,extended,8C4A0138 // lw t2, 0x138(v0) — cursor form
-patch=1,EE,21F70BC0,extended,8C4B013C // lw t3, 0x13C(v0) — rect form
-// Write cursor pos
-patch=1,EE,21F70BC4,extended,AD43000C // sw v1, 0x0C(t2)
-patch=1,EE,21F70BC8,extended,AD440010 // sw a0, 0x10(t2)
-// Write rect pos
-patch=1,EE,21F70BCC,extended,AD65000C // sw a1, 0x0C(t3)
-patch=1,EE,21F70BD0,extended,AD660010 // sw a2, 0x10(t3)
-// Write rect part size
-patch=1,EE,21F70BD4,extended,ACE80024 // sw t0, 0x24(a3) — width
-patch=1,EE,21F70BD8,extended,ACE90028 // sw t1, 0x28(a3) — height
 
-// Epilogue (0xBDC)
-patch=1,EE,21F70BDC,extended,8FBF0000 // lw ra, 0(sp)
-patch=1,EE,21F70BE0,extended,03E00008 // jr ra
-patch=1,EE,21F70BE4,extended,27BD0020 // addiu sp, 32
+// Always fix rect part size (runs every frame, safe if a3=0)
+patch=1,EE,21F70B94,extended,8C470B70 // lw a3, 0x0B70(v0) — rect part addr
+patch=1,EE,21F70B98,extended,10E00005 // beq a3, zero, past_size (BB0)
+patch=1,EE,21F70B9C,extended,00000000 // nop
+patch=1,EE,21F70BA0,extended,8C480B74 // lw t0, 0x0B74(v0) — width
+patch=1,EE,21F70BA4,extended,ACE80024 // sw t0, 0x24(a3)
+patch=1,EE,21F70BA8,extended,8C480B78 // lw t0, 0x0B78(v0) — height
+patch=1,EE,21F70BAC,extended,ACE80028 // sw t0, 0x28(a3)
+
+// Check cursor flag (past_size: BB0)
+patch=1,EE,21F70BB0,extended,8C430B60 // lw v1, 0x0B60(v0) — cursor X (0=skip)
+patch=1,EE,21F70BB4,extended,1060000E // beq v1, zero, epilogue (BF0)
+patch=1,EE,21F70BB8,extended,00000000 // nop
+
+patch=1,EE,21F70BBC,extended,8C440B64 // cursor goal Y
+patch=1,EE,21F70BC0,extended,8C450B68 // rect goal X
+patch=1,EE,21F70BC4,extended,8C460B6C // rect goal Y
+
+patch=1,EE,21F70BC8,extended,8F8294F8 // lw v0, -0x6B08(gp)
+patch=1,EE,21F70BCC,extended,8C4A0138 // lw t2, 0x138(v0)
+patch=1,EE,21F70BD0,extended,8C4B013C // lw t3, 0x13C(v0)
+
+patch=1,EE,21F70BD4,extended,34020002 // li v0, 2
+
+patch=1,EE,21F70BD8,extended,A1420020 // sb v0, 0x20(t2)
+patch=1,EE,21F70BDC,extended,AD430024 // sw v1, 0x24(t2)
+patch=1,EE,21F70BE0,extended,AD440028 // sw a0, 0x28(t2)
+
+patch=1,EE,21F70BE4,extended,A1620020 // sb v0, 0x20(t3)
+patch=1,EE,21F70BE8,extended,AD650024 // sw a1, 0x24(t3)
+patch=1,EE,21F70BEC,extended,AD660028 // sw a2, 0x28(t3)
+
+// Epilogue (BF0)
+patch=1,EE,21F70BF0,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F70BF4,extended,03E00008 // jr ra
+patch=1,EE,21F70BF8,extended,27BD0020 // addiu sp, 32

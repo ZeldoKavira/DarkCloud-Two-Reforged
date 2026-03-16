@@ -24,6 +24,7 @@ class ModManager:
         self.fast_start = False
         self.widescreen = False
         self.auto_repair = False
+        self.auto_key = False
         self.on_options_loaded = None  # callback(speed_label, pickup_label, map_label, map_tgt_label)
 
         self.all_mods = []
@@ -111,6 +112,10 @@ class ModManager:
                     self._auto_repair_tick()
                 except Exception:
                     pass
+                try:
+                    self._auto_key_tick()
+                except Exception:
+                    pass
 
             time.sleep(0.001)
 
@@ -189,6 +194,16 @@ class ModManager:
         has_melee = self._find_item(addr.REPAIR_POWDER_MELEE) is not None
         has_ranged = self._find_item(addr.REPAIR_POWDER_RANGED) is not None
         self.mem.write_int(addr.AUTO_REPAIR_FLAG, 1 if (has_melee or has_ranged) else 0)
+
+    def _auto_key_tick(self):
+        """Set auto-key flag and log when PNACH cave uses a key."""
+        self.mem.write_int(addr.AUTO_KEY_FLAG, 1 if self.auto_key else 0)
+        if not self.auto_key:
+            return
+        consumed = self.mem.read_int(addr.KEY_CONSUMED)
+        if consumed != 0:
+            self.mem.write_int(addr.KEY_CONSUMED, 0)
+            log.info("Auto-used dungeon key on door (box %d)", consumed - 1)
 
     def _find_item(self, item_id):
         """Find inventory slot address containing item_id, or None."""

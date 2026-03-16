@@ -30,11 +30,15 @@ class App:
         self.state = state
         self.manager = ModManager(state.mem, state)
         self.manager.on_options_loaded = self._on_options_loaded
+        self._opts_injected = False
+        self._custom_rows = []
+        self._last_opt_vals = {}
 
         # Load saved settings
         self.manager.fast_start = settings.get("fast_start") or False
         self.manager.widescreen = settings.get("widescreen") or False
         self.manager.auto_repair = settings.get("auto_repair") or False
+        self.manager.auto_key = settings.get("auto_key") or False
 
         self.root = tk.Tk()
         from core.version import get_version
@@ -217,6 +221,14 @@ class App:
         ttk.Label(opts, text="Automatically use repair powder when a weapon is about to break",
                   style="Dim.TLabel").pack(anchor=tk.W, padx=20)
 
+        self._auto_key_var = tk.BooleanVar(value=self.manager.auto_key)
+        tk.Checkbutton(opts, text="Auto Use Dungeon Key", variable=self._auto_key_var,
+                       command=self._toggle_auto_key, bg=BG_PANEL, fg=FG,
+                       selectcolor=BG, activebackground=BG_PANEL, activeforeground=FG,
+                       font=("Helvetica", 10)).pack(anchor=tk.W, pady=(8, 2))
+        ttk.Label(opts, text="Automatically use key on locked doors when pressing X",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
         # Town speed
         speed_row = ttk.Frame(opts, style="Panel.TFrame")
         speed_row.pack(anchor=tk.W, pady=(8, 2))
@@ -394,6 +406,11 @@ class App:
         self.manager.auto_repair = val
         settings.set("auto_repair", val)
 
+    def _toggle_auto_key(self):
+        val = self._auto_key_var.get()
+        self.manager.auto_key = val
+        settings.set("auto_key", val)
+
     def _set_run_speed(self):
         label = self._speed_var.get()
         settings.set("run_speed", label)
@@ -570,193 +587,271 @@ class App:
             log.error("Dump failed: %s", e)
 
     def _test_dialog(self):
-        """Inject row 16 + start poll."""
-        import struct
+        """Manual inject trigger (kept for debug)."""
+        self._options_inject()
+
+    def _options_auto_poll(self):
+        """Auto-detect options screen and inject custom rows."""
         try:
-            ptr = self.state.mem.read_int(0x203781B0)
-            if ptr == 0:
-                log.info("Options not open"); return
+            mci = self.state.mem.read_int(addr.MENU_COMMON_INFO)
+            if mci != 0:
+                page = self.state.mem.read_int(0x20000000 + mci + 0x54)
+                if page == 7 and not self._opts_injected:
+                    log.info("Options page detected, auto-injecting...")
+                    self._options_inject()
+                elif page != 7 and self._opts_injected:
+                    self._opts_injected = False
+                    self.state.mem.write_int(0x21F70B60, 0)
+                    self.state.mem.write_int(0x21F70B70, 0)
+        except Exception:
+            pass
+        self.root.after(500, self._options_auto_poll)
+
+    def _options_inject(self):
+        """Inject custom rows into the options screen and start the cursor poll."""
+        try:
+            ptr = self.state.mem.read_int(addr.CMENU_OPTION_PTR)
+            if ptr == 0: return
             pine = 0x20000000 + ptr
-            obf = self.state.mem.read_int(0x20378198)
+            obf = self.state.mem.read_int(addr.OPTION_BUTTON_FORM)
             if obf == 0: return
             op = 0x20000000 + obf
             count = self.state.mem.read_short(op + 0x68)
             if count <= 33:
-                self._inject_row16(pine, op, count)
+                self._inject_custom_rows(pine, op, count)
             self._pine = pine
-            self._poll_fix()
-            log.info("Injected + poll active")
+            self._opts_injected = True
+            self._last_opt_vals = {}
+            self._options_cursor_poll()
+            log.info("Options: auto-injected %d custom rows", len(self._custom_rows))
         except Exception as e:
-            log.error("Failed: %s", e)
+            log.error("Options inject failed: %s", e)
 
-    def _poll_fix(self):
-        """Poll to update cursor/rect positions for injected option rows.
-
-        The PNACH cave (10-cursor-fix) hooks after FormStep and writes
-        cursor + rect form positions from flag memory at 0x01F70B60-0x01F70B78.
-        This poll computes the correct positions from the selected button's
-        screen coordinates and writes them to the flag area.
-
-        Also updates the label text Y position at 0x01F80044 for the draw cave.
-
-        Flag memory layout (0x01F70B60+):
-          +0x00 (0xB60): cursor form target X (float, 0=disabled)
-          +0x04 (0xB64): cursor form target Y (float)
-          +0x08 (0xB68): rect form target X (float)
-          +0x0C (0xB6C): rect form target Y (float)
-          +0x10 (0xB70): rect part[0] PS2 addr (for size fix)
-          +0x14 (0xB74): rect part width (float)
-          +0x18 (0xB78): rect part height (float)
-        """
+    def _options_cursor_poll(self):
+        """Fast poll (200ms) for cursor/label position updates."""
         import struct
+        pack_f = lambda f: struct.unpack('I', struct.pack('f', f))[0]
+        read_f = lambda a: struct.unpack('f', struct.pack('I', self.state.mem.read_int(a)))[0]
         try:
-            # Bail if options screen closed (CMenuOptionPtr == 0)
-            menu_opt_ptr = self.state.mem.read_int(addr.CMENU_OPTION_PTR)
-            if menu_opt_ptr == 0:
+            if self.state.mem.read_int(addr.CMENU_OPTION_PTR) == 0:
+                self._opts_injected = False
                 return
-
-            pine_opt = self._pine  # PINE addr of CMenuOption
+            pine_opt = self._pine
             cursor_row = self.state.mem.read_int(pine_opt + 0x374)
 
+            # Update clip bounds every poll (form may still be animating on first read)
+            clip_ps2 = self.state.mem.read_int(0x20378148)  # LocalMenuClipForm
+            if clip_ps2:
+                pc = 0x20000000 + clip_ps2
+                cy = int(read_f(pc + 0x10))
+                ch = self.state.mem.read_short(pc + 0x06)
+                self.state.mem.write_int(0x21F8004C, cy)
+                self.state.mem.write_int(0x21F80050, cy + ch)
+
+            # Update label Y for all custom rows
+            for row_i, row in enumerate(self._custom_rows):
+                game_row = 16 + row_i
+                btn_ps2 = self.state.mem.read_int(pine_opt + 0x164 + game_row * 0xC)
+                if btn_ps2:
+                    pine_btn = 0x20000000 + btn_ps2
+                    btn_y = read_f(pine_btn + 0x20)
+                    obf_ps2 = self.state.mem.read_int(addr.OPTION_BUTTON_FORM)
+                    pine_obf = 0x20000000 + obf_ps2
+                    obf_y = read_f(pine_obf + 0x10)
+                    label_base = 0x21F80000 + row_i * 0x80
+                    self.state.mem.write_int(label_base + 0x44, int(obf_y + btn_y) + 2)
+
             if cursor_row >= 16:
-                # --- Read selected button's position ---
                 sub_selection = self.state.mem.read_int(pine_opt + 0x37C)
-                btn_ptr_offset = 0x164 + cursor_row * 0xC + sub_selection * 4
-                btn_ps2 = self.state.mem.read_int(pine_opt + btn_ptr_offset)
-                if not btn_ps2:
-                    self.root.after(200, self._poll_fix)
-                    return
-
-                pine_btn = 0x20000000 + btn_ps2
-                btn_x = struct.unpack('f', struct.pack('I', self.state.mem.read_int(pine_btn + 0x1C)))[0]
-                btn_y = struct.unpack('f', struct.pack('I', self.state.mem.read_int(pine_btn + 0x20)))[0]
-
-                # --- Read OptionButtonForm base position (scrolls with the list) ---
-                obf_ps2 = self.state.mem.read_int(addr.OPTION_BUTTON_FORM)
-                pine_obf = 0x20000000 + obf_ps2
-                obf_x = struct.unpack('f', struct.pack('I', self.state.mem.read_int(pine_obf + 0x0C)))[0]
-                obf_y = struct.unpack('f', struct.pack('I', self.state.mem.read_int(pine_obf + 0x10)))[0]
-
-                # --- Compute screen position of selected button ---
-                btn_screen_x = obf_x + btn_x
-                btn_screen_y = obf_y + btn_y
-
-                # --- Cursor form position (spinning arrow, offset -50,-3 from button) ---
-                cursor_target_x = btn_screen_x - 50.0
-                cursor_target_y = btn_screen_y - 3.0
-
-                # --- Rect form position (dashed rectangle, offset -2,-2 from button) ---
-                rect_target_x = btn_screen_x - 2.0
-                rect_target_y = btn_screen_y - 2.0
-
-                # --- Write cursor/rect targets to cave flag area ---
-                pack_f = lambda f: struct.unpack('I', struct.pack('f', f))[0]
-                FLAG_BASE = 0x21F70B60
-                self.state.mem.write_int(FLAG_BASE + 0x00, pack_f(cursor_target_x))
-                self.state.mem.write_int(FLAG_BASE + 0x04, pack_f(cursor_target_y))
-                self.state.mem.write_int(FLAG_BASE + 0x08, pack_f(rect_target_x))
-                self.state.mem.write_int(FLAG_BASE + 0x0C, pack_f(rect_target_y))
-
-                # --- Write rect part addr + size for the cave to fix SetWakuWH ---
-                mci_ps2 = self.state.mem.read_int(addr.MENU_COMMON_INFO)
-                pine_mci = 0x20000000 + mci_ps2
-                rect_form_ps2 = self.state.mem.read_int(pine_mci + 0x13C)
-                pine_rect_form = 0x20000000 + rect_form_ps2
-                rect_part0_ps2 = self.state.mem.read_int(pine_rect_form + 0x6C)
-                self.state.mem.write_int(FLAG_BASE + 0x10, rect_part0_ps2)
-                self.state.mem.write_int(FLAG_BASE + 0x14, pack_f(50.0))   # rect width
-                self.state.mem.write_int(FLAG_BASE + 0x18, pack_f(16.0))   # rect height
-
-                # --- Update label text Y to track the button row ---
-                LABEL_BASE = 0x21F80000
-                self.state.mem.write_int(LABEL_BASE + 0x40, 86)                # label X
-                self.state.mem.write_int(LABEL_BASE + 0x44, int(btn_screen_y) + 2)  # label Y
+                btn_ps2 = self.state.mem.read_int(pine_opt + 0x164 + cursor_row * 0xC + sub_selection * 4)
+                if btn_ps2:
+                    pine_btn = 0x20000000 + btn_ps2
+                    btn_x = read_f(pine_btn + 0x1C)
+                    btn_y = read_f(pine_btn + 0x20)
+                    obf_ps2 = self.state.mem.read_int(addr.OPTION_BUTTON_FORM)
+                    pine_obf = 0x20000000 + obf_ps2
+                    bsx = read_f(pine_obf + 0x0C) + btn_x
+                    bsy = read_f(pine_obf + 0x10) + btn_y
+                    FLAG_BASE = 0x21F70B60
+                    def i32(v): return int(v) & 0xFFFFFFFF
+                    self.state.mem.write_int(FLAG_BASE + 0x00, i32(bsx - 50))
+                    self.state.mem.write_int(FLAG_BASE + 0x04, i32(bsy - 3))
+                    self.state.mem.write_int(FLAG_BASE + 0x08, i32(bsx - 2))
+                    self.state.mem.write_int(FLAG_BASE + 0x0C, i32(bsy - 2))
+                    mci_ps2 = self.state.mem.read_int(addr.MENU_COMMON_INFO)
+                    pine_mci = 0x20000000 + mci_ps2
+                    rect_form_ps2 = self.state.mem.read_int(pine_mci + 0x13C)
+                    pine_rect_form = 0x20000000 + rect_form_ps2
+                    rect_part0_ps2 = self.state.mem.read_int(pine_rect_form + 0x6C)
+                    self.state.mem.write_int(FLAG_BASE + 0x10, rect_part0_ps2)
+                    self.state.mem.write_int(FLAG_BASE + 0x14, pack_f(50.0))
+                    self.state.mem.write_int(FLAG_BASE + 0x18, pack_f(16.0))
             else:
-                # Cursor on a native row — disable cave override
                 self.state.mem.write_int(0x21F70B60, 0)
 
-            self.root.after(200, self._poll_fix)
+            # Detect X press on custom rows
+            for row_i, row in enumerate(self._custom_rows):
+                game_row = 16 + row_i
+                cfg_addr = 0x21F80060 + row_i * 4
+                new_val = self.state.mem.read_int(cfg_addr)
+                old_val = self._last_opt_vals.get(row_i)
+                if old_val is not None and new_val != old_val:
+                    log.info("%s changed to %d", row["label"], new_val)
+                    row["on_change"](new_val)
+                    # Update button highlights
+                    for b in range(row["buttons"]):
+                        btn_ps2 = self.state.mem.read_int(pine_opt + 0x164 + game_row * 0xC + b * 4)
+                        if btn_ps2:
+                            pa = 0x20000000 + btn_ps2
+                            bright = 0x80 if b == new_val else 0x40
+                            for off in [0x07, 0x08, 0x09]:
+                                self.state.mem.write_byte(pa + off, bright)
+                self._last_opt_vals[row_i] = new_val
+
+            self.root.after(200, self._options_cursor_poll)
         except Exception as e:
             log.error("Options poll error: %s", e)
 
-    def _inject_row16(self, pine, op, old_count):
+    def _inject_custom_rows(self, pine, op, old_count):
+        """Inject multiple custom option rows into the options screen."""
         import struct
-        old_ptr = self.state.mem.read_int(op + 0x6C)
+        pack_f = lambda f: struct.unpack('I', struct.pack('f', f))[0]
+
+        self._custom_rows = [
+            {"label": "Run Speed",   "buttons": 2, "config_ps2": 0x01F80060,
+             "init": lambda: 1 if self.state.mem.read_int(addr.SPEED_INSTR_MAIN) != addr.speed_lui(0x40A0) else 0,
+             "on_change": self._on_run_speed_change},
+            {"label": "Auto Repair", "buttons": 2, "config_ps2": 0x01F80064,
+             "init": lambda: 0 if self.manager.auto_repair else 1,
+             "on_change": self._on_auto_repair_change},
+        ]
+        num_rows = len(self._custom_rows)
+        total_new_parts = sum(r["buttons"] for r in self._custom_rows)
+
+        # Copy existing parts to cave
         cave = 0x21F72000
-        old_pp = 0x20000000 + old_ptr
+        old_pp = 0x20000000 + self.state.mem.read_int(op + 0x6C)
         for i in range(0, old_count * 0x48, 4):
             self.state.mem.write_int(cave + i, self.state.mem.read_int(old_pp + i))
-        src = cave
-        tex_ptr = self.state.mem.read_int(src + 0x14)
-        tex_idx = self.state.mem.read_byte(src + 0x18)
-        src_w = self.state.mem.read_int(src + 0x24)
-        src_h = self.state.mem.read_int(src + 0x28)
-        flags = self.state.mem.read_byte(src + 0x19)
-        ablend = self.state.mem.read_byte(src + 0x1A)
-        new_count = old_count + 2
-        for b in range(2):
-            a = cave + (old_count + b) * 0x48
-            for i in range(0, 0x48, 4):
-                self.state.mem.write_int(a + i, 0)
-            self.state.mem.write_byte(a + 0x04, 1)
-            self.state.mem.write_byte(a + 0x05, 1)
-            bright = 0x80 if b == 0 else 0x40
-            for off in [0x07, 0x08, 0x09]:
-                self.state.mem.write_byte(a + off, bright)
-            self.state.mem.write_byte(a + 0x0A, 0x80)
-            self.state.mem.write_int(a + 0x14, tex_ptr)
-            self.state.mem.write_byte(a + 0x18, tex_idx)
-            self.state.mem.write_byte(a + 0x19, flags)
-            self.state.mem.write_byte(a + 0x1A, ablend)
-            x = 230.0 + b * 60.0
-            self.state.mem.write_int(a + 0x1C, struct.unpack('I', struct.pack('f', x))[0])
-            self.state.mem.write_int(a + 0x20, struct.unpack('I', struct.pack('f', 384.0))[0])
-            self.state.mem.write_int(a + 0x24, src_w)
-            self.state.mem.write_int(a + 0x28, src_h)
+
+        # Read template button properties from part[0]
+        tex_ptr = self.state.mem.read_int(cave + 0x14)
+        tex_idx = self.state.mem.read_byte(cave + 0x18)
+        src_w = self.state.mem.read_int(cave + 0x24)
+        src_h = self.state.mem.read_int(cave + 0x28)
+        flags = self.state.mem.read_byte(cave + 0x19)
+        ablend = self.state.mem.read_byte(cave + 0x1A)
+
+        part_idx = old_count
+        names_base = 0x21F70A40
+        name_idx = 0
+
+        for row_i, row in enumerate(self._custom_rows):
+            game_row = 16 + row_i
+            init_val = row["init"]()
+            self.state.mem.write_int(0x21F80060 + row_i * 4, init_val)
+
+            for b in range(row["buttons"]):
+                a = cave + part_idx * 0x48
+                for i in range(0, 0x48, 4):
+                    self.state.mem.write_int(a + i, 0)
+                self.state.mem.write_byte(a + 0x04, 1)  # enabled
+                self.state.mem.write_byte(a + 0x05, 1)  # visible
+                bright = 0x80 if b == init_val else 0x40
+                for off in [0x07, 0x08, 0x09]:
+                    self.state.mem.write_byte(a + off, bright)
+                self.state.mem.write_byte(a + 0x0A, 0x80)  # alpha
+                self.state.mem.write_int(a + 0x14, tex_ptr)
+                self.state.mem.write_byte(a + 0x18, tex_idx)
+                self.state.mem.write_byte(a + 0x19, flags)
+                self.state.mem.write_byte(a + 0x1A, ablend)
+                x = 230.0 + b * 60.0
+                y = 384.0 + row_i * 24.0
+                self.state.mem.write_int(a + 0x1C, pack_f(x))
+                self.state.mem.write_int(a + 0x20, pack_f(y))
+                self.state.mem.write_int(a + 0x24, src_w)
+                self.state.mem.write_int(a + 0x28, src_h)
+
+                # Name string: INDEX{game_row}{b}
+                name = f"INDEX{game_row}{b}".encode() + b"\x00" * 4
+                na = names_base + name_idx * 16
+                for i, ch in enumerate(name[:12]):
+                    self.state.mem.write_byte(na + i, ch)
+                self.state.mem.write_int(a, na - 0x20000000)  # name_ptr
+                name_idx += 1
+
+                # Wire button pointer in CMenuOption
+                btn_ptr_off = 0x164 + game_row * 0xC + b * 4
+                self.state.mem.write_int(pine + btn_ptr_off, (a - 0x20000000))
+                part_idx += 1
+            # Clear 3rd button pointer
+            self.state.mem.write_int(pine + 0x164 + game_row * 0xC + 8, 0)
+
+            # Set max toggle value and config pointer
+            self.state.mem.write_int(pine + 0x114 + game_row * 4, row["buttons"])
+            self.state.mem.write_int(pine + 0x254 + game_row * 4, row["config_ps2"])
+
+
+        # Update form parts count and pointer
+        new_count = old_count + total_new_parts
         new_ps2 = cave - 0x20000000
         self.state.mem.write_int(op + 0x6C, new_ps2)
         self.state.mem.write_short(op + 0x68, new_count)
-        p33 = new_ps2 + old_count * 0x48
-        self.state.mem.write_int(pine + 0x224, p33)
-        self.state.mem.write_int(pine + 0x228, p33 + 0x48)
-        self.state.mem.write_int(pine + 0x22C, 0)
 
-        # Write name strings at 0x01F70A40 (safe from auto-repair cave at 0x01F70B00)
-        names_base = 0x21F70A40
-        for b, name in enumerate([b"INDEX160\x00\x00\x00\x00", b"INDEX161\x00\x00\x00\x00"]):
-            na = names_base + b * 16
-            for i, ch in enumerate(name):
-                self.state.mem.write_byte(na + i, ch)
-            # Set name_ptr on the part
-            part_addr = cave + (old_count + b) * 0x48
-            self.state.mem.write_int(part_addr, (na - 0x20000000))  # PS2 addr
-        self.state.mem.write_int(pine + 0x114 + 16 * 4, 2)
-        v = struct.unpack('I', struct.pack('f', 17.0))[0]
+        # Set config_option_num to include new rows
+        total_rows = 16 + num_rows
+        v = struct.unpack('I', struct.pack('f', float(total_rows)))[0]
         self.state.mem.write_int(0x203769F8, v)
         self.state.mem.write_int(0x203769FC, v)
-        log.info("Row 16 injected (count %d→%d)", old_count, new_count)
-        # Verify: read back the last 2 parts' names
-        for b in range(2):
-            pa = cave + (old_count + b) * 0x48
-            np = self.state.mem.read_int(pa)  # name_ptr (PS2 addr)
-            if np:
-                npp = 0x20000000 + np
-                name = ''.join(chr(self.state.mem.read_byte(npp + i)) for i in range(10)
-                               if self.state.mem.read_byte(npp + i) != 0)
-                log.info("  part[%d] name='%s' name_ptr=0x%08X", old_count + b, name, np)
-            else:
-                log.info("  part[%d] name_ptr=NULL", old_count + b)
-        # Write label text at 0x01F80000
-        label = b"Run Speed\x00\x00\x00\x00\x00\x00\x00"
-        for i, ch in enumerate(label):
-            self.state.mem.write_byte(0x21F80000 + i, ch)
-        # Write label X/Y position (near the button row)
-        # The label should be to the left of the buttons
-        # Buttons are at screen X ~316, label should be around X=100
-        # Y should match the button Y
-        self.state.mem.write_int(0x21F80040, 86)
-        self.state.mem.write_int(0x21F80044, 200)
-        log.info("Draw flag set, label at 0x01F80000, X=86 Y=200")
+
+        # Write label strings (0x01F80000 + row_i * 0x80) and count
+        self.state.mem.write_int(0x21F80058, num_rows)
+        for row_i, row in enumerate(self._custom_rows):
+            label_base = 0x21F80000 + row_i * 0x80
+            label = row["label"].encode() + b"\x00" * 8
+            for i, ch in enumerate(label[:24]):
+                self.state.mem.write_byte(label_base + i, ch)
+            self.state.mem.write_int(label_base + 0x40, 86)  # X
+
+        # Pre-write rect part addr + size
+        mci_ps2 = self.state.mem.read_int(addr.MENU_COMMON_INFO)
+        if mci_ps2:
+            pine_mci = 0x20000000 + mci_ps2
+            rect_form_ps2 = self.state.mem.read_int(pine_mci + 0x13C)
+            pine_rect_form = 0x20000000 + rect_form_ps2
+            rect_part0_ps2 = self.state.mem.read_int(pine_rect_form + 0x6C)
+            self.state.mem.write_int(0x21F70B70, rect_part0_ps2)
+            self.state.mem.write_int(0x21F70B74, pack_f(50.0))
+            self.state.mem.write_int(0x21F70B78, pack_f(16.0))
+
+        log.info("Injected %d custom rows (%d parts, count %d→%d)",
+                 num_rows, total_new_parts, old_count, new_count)
+        # Debug: log button pointers for each custom row
+        for row_i in range(num_rows):
+            game_row = 16 + row_i
+            ptrs = []
+            for b in range(3):
+                p = self.state.mem.read_int(pine + 0x164 + game_row * 0xC + b * 4)
+                ptrs.append(f"0x{p:08X}" if p else "NULL")
+            mv = self.state.mem.read_int(pine + 0x114 + game_row * 4)
+            cv = self.state.mem.read_int(pine + 0x254 + game_row * 4)
+            log.info("  row%d: btns=[%s] max=%d cfg=0x%08X", game_row, ",".join(ptrs), mv, cv)
+
+    def _on_run_speed_change(self, val):
+        speed_map = {0: 0x40A0, 1: 0x40F0}
+        instr = addr.speed_lui(speed_map.get(val, 0x40A0))
+        self.state.mem.write_int(addr.SPEED_INSTR_MAIN, instr)
+        labels = {0: "1x (Default)", 1: "1.5x"}
+        if val in labels:
+            self._speed_var.set(labels[val])
+            settings.set("run_speed", labels[val])
+
+    def _on_auto_repair_change(self, val):
+        enabled = val == 0  # button 0 = ON, button 1 = OFF
+        self.manager.auto_repair = enabled
+        settings.set("auto_repair", enabled)
+        self._auto_repair_var.set(enabled)
+        self.state.mem.write_byte(addr.AUTO_REPAIR_FLAG, 1 if enabled else 0)
 
     def _on_close(self):
         self.manager.stop_nowait()
@@ -765,7 +860,7 @@ class App:
 
     def run(self):
         self.manager.start()
-        # Periodic no-op so Tkinter yields to signal handlers (Ctrl+C)
+        self._options_auto_poll()
         def _poll():
             self.root.after(500, _poll)
         _poll()

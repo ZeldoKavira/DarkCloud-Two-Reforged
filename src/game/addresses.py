@@ -267,6 +267,10 @@ HUD_LINE_COUNT = 0x21F70044         # Number of lines to draw (max 6)
 AUTO_REPAIR_FLAG = 0x21F70048       # 1=auto-repair enabled (set by Python)
 REPAIR_CONSUMED = 0x21F7004C        # Set by PNACH cave: 1=melee powder used, 2=ranged powder used
 
+# --- Auto key (dungeon door) ---
+AUTO_KEY_FLAG = 0x21F70050          # 1=auto-key enabled (set by Python)
+KEY_CONSUMED = 0x21F70054           # Set by PNACH cave: box_index+1 when key used (0=none)
+
 # Inventory: UserDataManager = SaveData + 0x1D2A0 = 0x21E1EAB0
 # 150 slots of 0x6C bytes. Per slot: +0x00=type(short), +0x02=itemID(short), +0x10=count(short)
 USER_DATA_MANAGER = 0x21E1EAB0

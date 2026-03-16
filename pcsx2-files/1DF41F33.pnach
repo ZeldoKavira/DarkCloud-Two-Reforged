@@ -527,104 +527,212 @@ patch=1,EE,21F70B54,extended,03E00008
 patch=1,EE,21F70B58,extended,27BD0010
 
 // ======== 10-cursor-fix ========
-// Hook after SetWakuWH to fix cursor + rect position + rect size
-// Hooks GetEtcTblValue call at 0x002C1F48 (runs after SetWakuWH)
-// Python writes to 0x01F70B60-0x01F70B78
-// Hook
+// Hook after SetWakuWH to fix cursor + rect goal position + rect size
+// Uses SetNextMovePos fields for smooth cursor animation
+// Python writes INT positions to 0x01F70B60-0x01F70B78
+// Rect size fix runs unconditionally (safe: a3=0 check skips write)
+// Hook GetEtcTblValue call at 0x002C1F48
 patch=1,EE,202C1F48,extended,0C7DC2E0
 // === Cave at 0x01F70B80 ===
 patch=1,EE,21F70B80,extended,27BDFFE0 // addiu sp, -32
 patch=1,EE,21F70B84,extended,AFBF0000 // sw ra, 0(sp)
-// Call original GetEtcTblValue — a0-a3 set by caller + delay slot
-patch=1,EE,21F70B88,extended,0C08AAEC // jal GetEtcTblValue (0x0022ABB0)
+patch=1,EE,21F70B88,extended,0C08AAEC // jal GetEtcTblValue
 patch=1,EE,21F70B8C,extended,00000000 // nop
-// Check flag
 patch=1,EE,21F70B90,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F70B94,extended,8C430B60 // lw v1, 0x0B60(v0) — cursor X (0=skip)
-// beq v1, zero, epilogue (0xBDC). offset=(BDC-B9C)/4=16
-patch=1,EE,21F70B98,extended,10600010
+// Always fix rect part size (runs every frame, safe if a3=0)
+patch=1,EE,21F70B94,extended,8C470B70 // lw a3, 0x0B70(v0) — rect part addr
+patch=1,EE,21F70B98,extended,10E00005 // beq a3, zero, past_size (BB0)
 patch=1,EE,21F70B9C,extended,00000000 // nop
-// Load targets
-patch=1,EE,21F70BA0,extended,8C440B64 // cursor Y
-patch=1,EE,21F70BA4,extended,8C450B68 // rect X
-patch=1,EE,21F70BA8,extended,8C460B6C // rect Y
-patch=1,EE,21F70BAC,extended,8C470B70 // rect part addr
-patch=1,EE,21F70BB0,extended,8C480B74 // rect width
-patch=1,EE,21F70BB4,extended,8C490B78 // rect height
-// Load MenuCommonInfo
-patch=1,EE,21F70BB8,extended,8F8294F8 // lw v0, -0x6B08(gp)
-// Load form pointers
-patch=1,EE,21F70BBC,extended,8C4A0138 // lw t2, 0x138(v0) — cursor form
-patch=1,EE,21F70BC0,extended,8C4B013C // lw t3, 0x13C(v0) — rect form
-// Write cursor pos
-patch=1,EE,21F70BC4,extended,AD43000C // sw v1, 0x0C(t2)
-patch=1,EE,21F70BC8,extended,AD440010 // sw a0, 0x10(t2)
-// Write rect pos
-patch=1,EE,21F70BCC,extended,AD65000C // sw a1, 0x0C(t3)
-patch=1,EE,21F70BD0,extended,AD660010 // sw a2, 0x10(t3)
-// Write rect part size
-patch=1,EE,21F70BD4,extended,ACE80024 // sw t0, 0x24(a3) — width
-patch=1,EE,21F70BD8,extended,ACE90028 // sw t1, 0x28(a3) — height
-// Epilogue (0xBDC)
-patch=1,EE,21F70BDC,extended,8FBF0000 // lw ra, 0(sp)
-patch=1,EE,21F70BE0,extended,03E00008 // jr ra
-patch=1,EE,21F70BE4,extended,27BD0020 // addiu sp, 32
+patch=1,EE,21F70BA0,extended,8C480B74 // lw t0, 0x0B74(v0) — width
+patch=1,EE,21F70BA4,extended,ACE80024 // sw t0, 0x24(a3)
+patch=1,EE,21F70BA8,extended,8C480B78 // lw t0, 0x0B78(v0) — height
+patch=1,EE,21F70BAC,extended,ACE80028 // sw t0, 0x28(a3)
+// Check cursor flag (past_size: BB0)
+patch=1,EE,21F70BB0,extended,8C430B60 // lw v1, 0x0B60(v0) — cursor X (0=skip)
+patch=1,EE,21F70BB4,extended,1060000E // beq v1, zero, epilogue (BF0)
+patch=1,EE,21F70BB8,extended,00000000 // nop
+patch=1,EE,21F70BBC,extended,8C440B64 // cursor goal Y
+patch=1,EE,21F70BC0,extended,8C450B68 // rect goal X
+patch=1,EE,21F70BC4,extended,8C460B6C // rect goal Y
+patch=1,EE,21F70BC8,extended,8F8294F8 // lw v0, -0x6B08(gp)
+patch=1,EE,21F70BCC,extended,8C4A0138 // lw t2, 0x138(v0)
+patch=1,EE,21F70BD0,extended,8C4B013C // lw t3, 0x13C(v0)
+patch=1,EE,21F70BD4,extended,34020002 // li v0, 2
+patch=1,EE,21F70BD8,extended,A1420020 // sb v0, 0x20(t2)
+patch=1,EE,21F70BDC,extended,AD430024 // sw v1, 0x24(t2)
+patch=1,EE,21F70BE0,extended,AD440028 // sw a0, 0x28(t2)
+patch=1,EE,21F70BE4,extended,A1620020 // sb v0, 0x20(t3)
+patch=1,EE,21F70BE8,extended,AD650024 // sw a1, 0x24(t3)
+patch=1,EE,21F70BEC,extended,AD660028 // sw a2, 0x28(t3)
+// Epilogue (BF0)
+patch=1,EE,21F70BF0,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F70BF4,extended,03E00008 // jr ra
+patch=1,EE,21F70BF8,extended,27BD0020 // addiu sp, 32
 
 // ======== 11-option-labels ========
-// Options screen draw hook — renders custom option labels via CFont
-// Label data at 0x01F80000+
+// Options screen draw hook — renders N custom option labels via CFont
+// Label count at 0x01F80058. Each label at 0x01F80000 + i*0x80:
+//   +0x00: string, +0x40: X(int), +0x44: Y(int)
+// Clip bounds (shared): 0x01F8004C=top, 0x01F80050=bottom
 // Patch drawfunctbl[7]
 patch=1,EE,2035099C,extended,01F70E00
-// Persist X via PNACH
-patch=1,EE,21F80040,extended,00000056 // X = 86
+// Persist label X (set by Python per-label, but default here)
+patch=1,EE,21F80040,extended,00000056
 // === Draw cave at 0x01F70E00 ===
-// E00: prologue
-patch=1,EE,21F70E00,extended,27BDFFD0 // addiu sp, -48
+// Prologue
+patch=1,EE,21F70E00,extended,27BDFFC0 // addiu sp, -64
 patch=1,EE,21F70E04,extended,AFBF0000 // sw ra, 0(sp)
 patch=1,EE,21F70E08,extended,AFB00004 // sw s0, 4(sp)
-// E0C: FormDraw(MenuPosData)
-patch=1,EE,21F70E0C,extended,8F849450 // lw a0, -0x6BB0(gp)
-patch=1,EE,21F70E10,extended,0C08AD0C // jal FormDraw
-patch=1,EE,21F70E14,extended,00000000 // nop
-// E18: check label
-patch=1,EE,21F70E18,extended,3C1001F8 // lui s0, 0x01F8
-patch=1,EE,21F70E1C,extended,92020000 // lbu v0, 0(s0)
-// beq v0, zero, epilogue (E90). offset=(E90-E24)/4=27
-patch=1,EE,21F70E20,extended,1040001B
-patch=1,EE,21F70E24,extended,00000000
-// E28: SetFuchi(CFont, 5)
-patch=1,EE,21F70E28,extended,3C04003E
-patch=1,EE,21F70E2C,extended,24848090
-patch=1,EE,21F70E30,extended,0C0B515C // jal SetFuchi
-patch=1,EE,21F70E34,extended,34050005 // li a1, 5
-// E38: SetDrawSize(CFont, 16, 20)
-patch=1,EE,21F70E38,extended,3C04003E
-patch=1,EE,21F70E3C,extended,24848090
-patch=1,EE,21F70E40,extended,34050010
-patch=1,EE,21F70E44,extended,0C0B5128 // jal SetDrawSize
-patch=1,EE,21F70E48,extended,34060014
-// E4C: SetClearance(CFont, 16, 20)
-patch=1,EE,21F70E4C,extended,3C04003E
-patch=1,EE,21F70E50,extended,24848090
-patch=1,EE,21F70E54,extended,34050010
-patch=1,EE,21F70E58,extended,0C0B512C // jal SetClearance
-patch=1,EE,21F70E5C,extended,34060014
-// E60: SetColor(CFont, 0x80667678) — uint version, RGBA packed
-patch=1,EE,21F70E60,extended,3C04003E
-patch=1,EE,21F70E64,extended,24848090
-patch=1,EE,21F70E68,extended,3C058068 // lui a1, 0x8068
-patch=1,EE,21F70E6C,extended,0C0B5148 // jal SetColor_Ui (0x002D4520)
-patch=1,EE,21F70E70,extended,34A56A6B // ori a1, 0x6A6B (delay) — 0x80686A6B
-// E74: DrawDirect(CFont, label, X, Y)
+patch=1,EE,21F70E0C,extended,AFB10008 // sw s1, 8(sp)
+patch=1,EE,21F70E10,extended,AFB2000C // sw s2, 12(sp)
+patch=1,EE,21F70E14,extended,AFB30010 // sw s3, 16(sp)
+// FormDraw(MenuPosData)
+patch=1,EE,21F70E18,extended,8F849450 // lw a0, -0x6BB0(gp)
+patch=1,EE,21F70E1C,extended,0C08AD0C // jal FormDraw
+patch=1,EE,21F70E20,extended,00000000 // nop
+// Setup
+patch=1,EE,21F70E24,extended,3C1001F8 // lui s0, 0x01F8
+patch=1,EE,21F70E28,extended,8E110058 // lw s1, 0x58(s0)  ; label count
+patch=1,EE,21F70E2C,extended,1220002A // beq s1, zero, epilogue (ED8)
+patch=1,EE,21F70E30,extended,00000000 // nop
+patch=1,EE,21F70E34,extended,8E12004C // lw s2, 0x4C(s0)  ; clip_top
+patch=1,EE,21F70E38,extended,8E130050 // lw s3, 0x50(s0)  ; clip_bottom
+// Loop (E3C):
+patch=1,EE,21F70E3C,extended,92020000 // lbu v0, 0(s0)    ; label byte 0
+patch=1,EE,21F70E40,extended,10400021 // beq v0, zero, skip (EC8)
+patch=1,EE,21F70E44,extended,00000000 // nop
+patch=1,EE,21F70E48,extended,8E070044 // lw a3, 0x44(s0)  ; Y
+patch=1,EE,21F70E4C,extended,00F2182A // slt v1, a3, s2   ; Y < clip_top?
+patch=1,EE,21F70E50,extended,1460001D // bne v1, zero, skip (EC8)
+patch=1,EE,21F70E54,extended,00F3182A // slt v1, a3, s3   ; Y < clip_bottom? (delay)
+patch=1,EE,21F70E58,extended,1060001B // beq v1, zero, skip (EC8)
+patch=1,EE,21F70E5C,extended,00000000 // nop
+patch=1,EE,21F70E60,extended,AFA70014 // sw a3, 0x14(sp)  ; save Y
+// SetFuchi(CFont, 5)
+patch=1,EE,21F70E64,extended,3C04003E
+patch=1,EE,21F70E68,extended,24848090
+patch=1,EE,21F70E6C,extended,0C0B515C // jal SetFuchi
+patch=1,EE,21F70E70,extended,34050005
+// SetDrawSize(CFont, 16, 20)
 patch=1,EE,21F70E74,extended,3C04003E
 patch=1,EE,21F70E78,extended,24848090
-patch=1,EE,21F70E7C,extended,26050000 // addiu a1, s0, 0 — label at 0x01F80000
-patch=1,EE,21F70E80,extended,8E060040 // lw a2, 0x40(s0) — X
-patch=1,EE,21F70E84,extended,0C0B5688 // jal DrawDirect
-patch=1,EE,21F70E88,extended,8E070044 // lw a3, 0x44(s0) — Y (delay)
-patch=1,EE,21F70E8C,extended,00000000
-// Epilogue (E90)
-patch=1,EE,21F70E90,extended,8FB00004
-patch=1,EE,21F70E94,extended,8FBF0000
-patch=1,EE,21F70E98,extended,03E00008 // jr ra
-patch=1,EE,21F70E9C,extended,27BD0030 // addiu sp, 48
+patch=1,EE,21F70E7C,extended,34050010
+patch=1,EE,21F70E80,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F70E84,extended,34060014
+// SetClearance(CFont, 16, 20)
+patch=1,EE,21F70E88,extended,3C04003E
+patch=1,EE,21F70E8C,extended,24848090
+patch=1,EE,21F70E90,extended,34050010
+patch=1,EE,21F70E94,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70E98,extended,34060014
+// SetColor(CFont, 0x80686A6B)
+patch=1,EE,21F70E9C,extended,3C04003E
+patch=1,EE,21F70EA0,extended,24848090
+patch=1,EE,21F70EA4,extended,3C058068
+patch=1,EE,21F70EA8,extended,0C0B5148 // jal SetColor_Ui
+patch=1,EE,21F70EAC,extended,34A56A6B
+// DrawDirect(CFont, label, X, Y)
+patch=1,EE,21F70EB0,extended,3C04003E
+patch=1,EE,21F70EB4,extended,24848090
+patch=1,EE,21F70EB8,extended,26050000 // addiu a1, s0, 0  ; label str
+patch=1,EE,21F70EBC,extended,8E060040 // lw a2, 0x40(s0)  ; X
+patch=1,EE,21F70EC0,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70EC4,extended,8FA70014 // lw a3, 0x14(sp)  ; Y (delay)
+// Skip (EC8): advance to next label
+patch=1,EE,21F70EC8,extended,26100080 // addiu s0, 0x80
+patch=1,EE,21F70ECC,extended,2631FFFF // addiu s1, -1
+patch=1,EE,21F70ED0,extended,1620FFDA // bne s1, zero, loop (E3C)
+patch=1,EE,21F70ED4,extended,00000000 // nop
+// Epilogue (ED8)
+patch=1,EE,21F70ED8,extended,8FB30010 // lw s3, 16(sp)
+patch=1,EE,21F70EDC,extended,8FB2000C // lw s2, 12(sp)
+patch=1,EE,21F70EE0,extended,8FB10008 // lw s1, 8(sp)
+patch=1,EE,21F70EE4,extended,8FB00004 // lw s0, 4(sp)
+patch=1,EE,21F70EE8,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F70EEC,extended,03E00008 // jr ra
+patch=1,EE,21F70EF0,extended,27BD0040 // addiu sp, 64
+
+// ======== 12-auto-key ========
+// Auto Key — automatically uses dungeon key on locked door when pressing X
+// AUTO_KEY_FLAG  (0x01F70050): 1=enabled, set by Python
+// KEY_CONSUMED   (0x01F70054): written by cave: box_index+1 when key used (0=none)
+//
+// Hooks li v1,0x44c at 0x001D3784 in IsEventRun (treasure box X press).
+// At hook: v0=box index (from CheckEvent), s3=&BattleAreaScene+0x44, gp valid.
+// Cave at 0x01F70C00
+//
+// Game functions:
+//   GetNumSameItem(userData, itemId) @ 0x0019DDE0 — returns item count
+//   DeleteItem(userData, itemId, count) @ 0x0019E8C0 — removes from inventory
+// Globals (gp-relative):
+//   TreasureBoxMan: gp - 0x722C     DngUserData: gp - 0x7260
+// Treasure box entry: TreasureBoxMan + index * 0x70
+//   +0x64 (byte) = status (1=active, 0=opened/gone)
+//   +0x6C (ushort) = required key item ID (0xFFFF = not a keyed box)
+// Return: 0x001D3810 (IsEventRun epilogue)
+// === Hook ===
+patch=1,EE,201D3784,extended,087DC300 // j 0x01F70C00
+patch=1,EE,201D3788,extended,00000000 // nop (was: b 0x001D3810)
+// === Cave at 0x01F70C00 ===
+// +00: check AUTO_KEY_FLAG
+patch=1,EE,21F70C00,extended,3C0101F7 // lui at, 0x01F7
+patch=1,EE,21F70C04,extended,8C210050 // lw at, 0x0050(at)
+patch=1,EE,21F70C08,extended,14200004 // bne at, zero, +1C (auto_key)
+patch=1,EE,21F70C0C,extended,00000000 // nop
+// +10: normal — li v1,0x44c; store; epilogue
+patch=1,EE,21F70C10,extended,2403044C // li v1, 0x44c
+patch=1,EE,21F70C14,extended,08074E04 // j 0x001D3810
+patch=1,EE,21F70C18,extended,A6630000 // sh v1, 0(s3)  [delay]
+// +1C: auto_key — save frame
+patch=1,EE,21F70C1C,extended,27BDFFD0 // addiu sp, sp, -0x30
+patch=1,EE,21F70C20,extended,FFBF0028 // sd ra, 0x28(sp)
+patch=1,EE,21F70C24,extended,AFA20020 // sw v0, 0x20(sp)  [box index]
+// +28: entry = TreasureBoxMan + index * 0x70
+patch=1,EE,21F70C28,extended,8F848DD4 // lw a0, -0x722C(gp)  [TreasureBoxMan]
+patch=1,EE,21F70C2C,extended,24030070 // li v1, 0x70
+patch=1,EE,21F70C30,extended,00430018 // mult v0, v1
+patch=1,EE,21F70C34,extended,00001812 // mflo v1
+patch=1,EE,21F70C38,extended,00832021 // addu a0, a0, v1
+patch=1,EE,21F70C3C,extended,AFA4001C // sw a0, 0x1C(sp)  [entry addr]
+// +40: read key item ID
+patch=1,EE,21F70C40,extended,9485006C // lhu a1, 0x6C(a0)
+patch=1,EE,21F70C44,extended,AFA50018 // sw a1, 0x18(sp)
+// +48: if key == 0xFFFF or 0 → restore_normal (+B0)
+patch=1,EE,21F70C48,extended,3C010001 // lui at, 1
+patch=1,EE,21F70C4C,extended,2421FFFF // addiu at, at, -1  [at=0xFFFF]
+patch=1,EE,21F70C50,extended,10A10017 // beq a1, at, +B0
+patch=1,EE,21F70C54,extended,00000000 // nop
+patch=1,EE,21F70C58,extended,10A00015 // beq a1, zero, +B0
+patch=1,EE,21F70C5C,extended,00000000 // nop
+// +60: GetNumSameItem(DngUserData, keyItemId)
+patch=1,EE,21F70C60,extended,8F848DA0 // lw a0, -0x7260(gp)
+patch=1,EE,21F70C64,extended,0C067778 // jal GetNumSameItem
+patch=1,EE,21F70C68,extended,00000000 // nop
+// +6C: if count==0 → restore_normal (+B0)
+patch=1,EE,21F70C6C,extended,10400010 // beq v0, zero, +B0
+patch=1,EE,21F70C70,extended,00000000 // nop
+// +74: DeleteItem(DngUserData, keyItemId, 1)
+patch=1,EE,21F70C74,extended,8F848DA0 // lw a0, -0x7260(gp)
+patch=1,EE,21F70C78,extended,8FA50018 // lw a1, 0x18(sp)
+patch=1,EE,21F70C7C,extended,0C067A30 // jal DeleteItem
+patch=1,EE,21F70C80,extended,24060001 // li a2, 1  [delay]
+// +84: set box status = 0
+patch=1,EE,21F70C84,extended,8FA2001C // lw v0, 0x1C(sp)
+patch=1,EE,21F70C88,extended,A0400064 // sb zero, 0x64(v0)
+// +8C: KEY_CONSUMED = box_index + 1
+patch=1,EE,21F70C8C,extended,8FA20020 // lw v0, 0x20(sp)
+patch=1,EE,21F70C90,extended,24420001 // addiu v0, v0, 1
+patch=1,EE,21F70C94,extended,3C0101F7 // lui at, 0x01F7
+patch=1,EE,21F70C98,extended,AC220054 // sw v0, 0x0054(at)
+// +9C: restore, cancel event, return
+patch=1,EE,21F70C9C,extended,DFBF0028 // ld ra, 0x28(sp)
+patch=1,EE,21F70CA0,extended,27BD0030 // addiu sp, sp, 0x30
+patch=1,EE,21F70CA4,extended,2403FFFF // li v1, -1  [0xFFFF = no event]
+patch=1,EE,21F70CA8,extended,08074E04 // j 0x001D3810
+patch=1,EE,21F70CAC,extended,A6630000 // sh v1, 0(s3)  [delay]
+// +B0: restore_normal — no key available, use original event
+patch=1,EE,21F70CB0,extended,DFBF0028 // ld ra, 0x28(sp)
+patch=1,EE,21F70CB4,extended,27BD0030 // addiu sp, sp, 0x30
+patch=1,EE,21F70CB8,extended,2403044C // li v1, 0x44c
+patch=1,EE,21F70CBC,extended,08074E04 // j 0x001D3810
+patch=1,EE,21F70CC0,extended,A6630000 // sh v1, 0(s3)  [delay]
