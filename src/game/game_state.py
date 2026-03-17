@@ -80,8 +80,8 @@ class GameSnapshot:
 
 LOOP_NAMES = {
     0: "Exit",
-    1: "Dungeon",
-    2: "Town",
+    1: "Town",
+    2: "Dungeon",
     3: "Title Screen",
 }
 

@@ -70,9 +70,18 @@ class Dialog:
     def active(self):
         return self._mem.read_int(SYSTEM_MESSAGE_0 + 0x17E4) != -1
 
-    def show(self, text, duration=5):
-        """Show a passive dialog for `duration` seconds."""
-        self._write_and_trigger(text)
+    def show(self, text, duration=5, mode=None, x=None, y=None):
+        """Show a passive dialog for `duration` seconds.
+        mode: MsgPreset mode (default 4=passive bottom-center, 0=NPC white text)
+        """
+        self._write_and_trigger(text, mode=mode)
+        if x is not None or y is not None:
+            import time; time.sleep(0.05)
+            sm = SYSTEM_MESSAGE_0
+            if x is not None:
+                self._mem.write_int(sm + 0x198, x)
+            if y is not None:
+                self._mem.write_int(sm + 0x19C, y)
         self._set_timer(duration)
 
     def ask(self, text, callback=None):
@@ -96,11 +105,12 @@ class Dialog:
 
     # --- internals ---
 
-    def _write_and_trigger(self, text):
+    def _write_and_trigger(self, text, mode=None):
         self._cancel_timers()
         encoded = encode(text)
         for i in range(max(len(encoded), 100)):
             self._mem.write_short(MSG_0x81B1_TEXT + i * 2, encoded[i] if i < len(encoded) else 0)
+        self._mem.write_int(DIALOG_FLAG + 8, mode if mode is not None else 4)  # DIALOG_MODE
         self._mem.write_int(DIALOG_FLAG, 0x81B1)
 
     def _set_timer(self, seconds):

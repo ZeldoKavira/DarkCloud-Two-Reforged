@@ -72,6 +72,16 @@ class ModManager:
 
             loop_no = snap.loop_no
 
+            # On title screen with fast start, default cursor to Continue (once)
+            if loop_no == addr.Mode.TITLE and self.fast_start:
+                if not getattr(self, '_title_cursor_set', False):
+                    ti_ptr = self.mem.read_int(addr.TITLE_INFO_PTR)
+                    if ti_ptr != 0:
+                        self.mem.write_short(0x20000000 + ti_ptr + 8, 1)
+                        self._title_cursor_set = True
+            else:
+                self._title_cursor_set = False
+
             # Detect entering in-game (dungeon or town)
             if not self._ingame and loop_no in (addr.Mode.DUNGEON, addr.Mode.TOWN):
                 # Wait for load to finish — keep checking until loop stabilizes
@@ -104,19 +114,22 @@ class ModManager:
 
             # Update HUD overlay
             if self._ingame:
-                try:
-                    if settings.get("dungeon_hud") is not False:
-                        write_hud(self.mem, loop_no)
-                    else:
-                        self.mem.write_int(addr.HUD_FLAG, 0)
-                except Exception as e:
-                    log.error("HUD error: %s", e)
+                hud_counter = getattr(self, '_hud_counter', 0) + 1
+                self._hud_counter = hud_counter
+                if hud_counter % 200 == 0:  # ~every 200ms
+                    try:
+                        if settings.get("dungeon_hud") is not False:
+                            write_hud(self.mem, loop_no)
+                        else:
+                            self.mem.write_int(addr.HUD_FLAG, 0)
+                    except Exception as e:
+                        log.error("HUD error: %s", e)
+                    try:
+                        self._auto_key_tick()
+                    except Exception:
+                        pass
                 try:
                     self._auto_repair_tick()
-                except Exception:
-                    pass
-                try:
-                    self._auto_key_tick()
                 except Exception:
                     pass
 
@@ -164,34 +177,67 @@ class ModManager:
     def _auto_repair_tick(self):
         """Check if PNACH cave consumed a repair powder, then update inventory."""
         if not self.auto_repair:
-            self.mem.write_int(addr.AUTO_REPAIR_FLAG, 0)
+            if getattr(self, '_repair_flag_set', False):
+                self.mem.write_int(addr.AUTO_REPAIR_FLAG, 0)
+                self._repair_flag_set = False
             return
 
-        # Check if cave signaled a consumption
         consumed = self.mem.read_int(addr.REPAIR_CONSUMED)
         if consumed != 0:
             self.mem.write_int(addr.REPAIR_CONSUMED, 0)
             item_id = addr.REPAIR_POWDER_MELEE if consumed == 1 else addr.REPAIR_POWDER_RANGED
-            slot_name = "melee" if consumed == 1 else "ranged"
-            if self._consume_item(item_id):
-                log.info("Auto-used Repair Powder (%s)", slot_name)
+            cached = getattr(self, '_repair_slot_cache', {}).get(item_id)
+            if cached is not None:
+                iid = self.mem.read_short(cached + 2)
+                count = self.mem.read_short(cached + 0x10)
+                if iid == item_id and count > 0:
+                    self.mem.write_short(cached + 0x10, count - 1)
+                    log.info("Auto-used Repair Powder (%s)", "melee" if consumed == 1 else "ranged")
+                    if count - 1 <= 0:
+                        self._repair_needs_scan = True
+                else:
+                    self._repair_needs_scan = True
             else:
-                log.warning("Repair powder consumed but item not found in inventory!")
+                self._repair_needs_scan = True
 
-        # Scan inventory for any repair powder and set/clear the flag
-        has_melee = self._find_item(addr.REPAIR_POWDER_MELEE) is not None
-        has_ranged = self._find_item(addr.REPAIR_POWDER_RANGED) is not None
-        self.mem.write_int(addr.AUTO_REPAIR_FLAG, 1 if (has_melee or has_ranged) else 0)
+        if getattr(self, '_repair_needs_scan', True):
+            cache = {}
+            melee_slot = self._find_item(addr.REPAIR_POWDER_MELEE)
+            ranged_slot = self._find_item(addr.REPAIR_POWDER_RANGED)
+            if melee_slot: cache[addr.REPAIR_POWDER_MELEE] = melee_slot
+            if ranged_slot: cache[addr.REPAIR_POWDER_RANGED] = ranged_slot
+            self._repair_slot_cache = cache
+            self.mem.write_int(addr.AUTO_REPAIR_FLAG, 1 if cache else 0)
+            self._repair_flag_set = bool(cache)
+            self._repair_needs_scan = False
 
     def _auto_key_tick(self):
-        """Set auto-key flag and log when PNACH cave uses a key."""
-        self.mem.write_int(addr.AUTO_KEY_FLAG, 1 if self.auto_key else 0)
+        """Auto-use dungeon key on gate when player presses X."""
         if not self.auto_key:
             return
-        consumed = self.mem.read_int(addr.KEY_CONSUMED)
-        if consumed != 0:
-            self.mem.write_int(addr.KEY_CONSUMED, 0)
-            log.info("Auto-used dungeon key on door (box %d)", consumed - 1)
+        PINE = 0x20000000
+        menu_state = self.mem.read_int(PINE + 0x01ECD618)
+        if menu_state != 9:
+            return
+        key_id = self.mem.read_short(PINE + 0x01ECD64C)
+        if key_id < 0x151 or key_id > 0x15F:
+            return
+        if self._find_item(key_id) is not None:
+            self._consume_item(key_id)
+            p_use = self.mem.read_int(0x20377CE0)
+            if p_use != 0:
+                self.mem.write_int(0x20000000 + p_use + 4, key_id)
+            self.mem.write_int(0x20377CE0, 0)
+            self.mem.write_int(PINE + 0x01ECD630, key_id)
+            self.mem.write_int(PINE + 0x01ECD618, 0)
+            self.mem.write_int(PINE + 0x01ECE500, 0)
+            log.info("Auto-used gate key 0x%X", key_id)
+        else:
+            self.mem.write_int(PINE + 0x01ECD630, 0)
+            self.mem.write_int(PINE + 0x01ECD618, 0)
+            self.mem.write_int(PINE + 0x01ECE500, 0)
+            if hasattr(self, 'dialog') and self.dialog:
+                self.dialog.show("You don't have the required key.", duration=3, mode=0)
 
     def _find_item(self, item_id):
         """Find inventory slot address containing item_id, or None."""
@@ -212,9 +258,7 @@ class ModManager:
             return False
         count = self.mem.read_short(slot + 0x10)
         if count <= 1:
-            # Last one — zero out the entire slot
-            for off in range(0, addr.INVENTORY_SLOT_SIZE, 4):
-                self.mem.write_int(slot + off, 0)
+            self.mem.write_short(slot + 0x10, 0)
         else:
             self.mem.write_short(slot + 0x10, count - 1)
         return True

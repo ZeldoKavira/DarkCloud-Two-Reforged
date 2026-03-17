@@ -28,108 +28,110 @@ patch=1,EE,21F70614,extended,AFB30010 // sw s3, 16(sp)
 patch=1,EE,21F70618,extended,0C073C24 // jal DngMainDraw
 patch=1,EE,21F7061C,extended,00000000 // nop
 
-// Check HUD_FLAG — if 0, skip to epilogue @71C
+// Check HUD_FLAG — if 0, skip to epilogue @72C
 patch=1,EE,21F70620,extended,3C0201F7 // lui v0, 0x01F7
 patch=1,EE,21F70624,extended,8C420040 // lw v0, 0x0040(v0)
-// beq v0,zero,724; off=(724-62C)/4=0x3E
-patch=1,EE,21F70628,extended,1040003E // beq v0, zero, 724
+// beq v0,zero,72C; off=(72C-62C)/4=0x40
+patch=1,EE,21F70628,extended,10400040 // beq v0, zero, 72C
 patch=1,EE,21F7062C,extended,00000000 // nop
 
-// Check anim float >= 1.0 — if not, skip to epilogue @71C
+// Check anim float >= 1.0 — if not, skip to epilogue @72C
 patch=1,EE,21F70630,extended,8F828DB0 // lw v0, -0x7250(gp)  ; BattleAreaScene
-patch=1,EE,21F70634,extended,8C42004C // lw v0, 0x4C(v0)     ; anim float as int
-patch=1,EE,21F70638,extended,3C013F80 // lui at, 0x3F80       ; 1.0f
-patch=1,EE,21F7063C,extended,0041082A // slt at, v0, at       ; at=1 if < 1.0
-// bne at,zero,724; off=(724-644)/4=0x38
-patch=1,EE,21F70640,extended,14200038 // bne at, zero, 724
-patch=1,EE,21F70644,extended,00000000 // nop
+patch=1,EE,21F70634,extended,10400005 // beq v0, zero, 64C   ; null → skip anim, draw anyway
+patch=1,EE,21F70638,extended,00000000 // nop
+patch=1,EE,21F7063C,extended,8C42004C // lw v0, 0x4C(v0)     ; anim float as int
+patch=1,EE,21F70640,extended,3C013F80 // lui at, 0x3F80       ; 1.0f
+patch=1,EE,21F70644,extended,0041082A // slt at, v0, at       ; at=1 if < 1.0
+// bne at,zero,72C; off=(72C-64C)/4=0x38
+patch=1,EE,21F70648,extended,14200038 // bne at, zero, 72C
+patch=1,EE,21F7064C,extended,00000000 // nop
 
 // s1 = line count, s0 = 0 (counter), s2 = text base, s3 = y
-patch=1,EE,21F70648,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F7064C,extended,8C510044 // lw s1, 0x0044(v0)
-// blez s1, restore @6FC; off=(6FC-654)/4=0x2A
-patch=1,EE,21F70650,extended,1A20002A // blez s1, 6FC
-patch=1,EE,21F70654,extended,00008025 // move s0, zero (delay)
-patch=1,EE,21F70658,extended,3C1201F7 // lui s2, 0x01F7
-patch=1,EE,21F7065C,extended,36520A00 // ori s2, 0x0A00  s2 = text base
-patch=1,EE,21F70660,extended,34130046 // li s3, 70       s3 = y start (below hotbar)
+patch=1,EE,21F70650,extended,3C0201F7 // lui v0, 0x01F7
+patch=1,EE,21F70654,extended,8C510044 // lw s1, 0x0044(v0)
+// blez s1, restore @704; off=(704-65C)/4=0x2A
+patch=1,EE,21F70658,extended,1A20002A // blez s1, 704
+patch=1,EE,21F7065C,extended,00008025 // move s0, zero (delay)
+patch=1,EE,21F70660,extended,3C1201F7 // lui s2, 0x01F7
+patch=1,EE,21F70664,extended,36520A00 // ori s2, 0x0A00  s2 = text base
+patch=1,EE,21F70668,extended,34130046 // li s3, 70       s3 = y start (below hotbar)
 
 // SetDrawSize(12, 16)
-patch=1,EE,21F70664,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F70668,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F7066C,extended,3405000C // li a1, 12
-patch=1,EE,21F70670,extended,0C0B5128 // jal SetDrawSize
-patch=1,EE,21F70674,extended,34060010 // li a2, 16
+patch=1,EE,21F7066C,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70670,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70674,extended,3405000C // li a1, 12
+patch=1,EE,21F70678,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F7067C,extended,34060010 // li a2, 16
 
 // SetClearance(11, 14)
-patch=1,EE,21F70678,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F7067C,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F70680,extended,3405000B // li a1, 11
-patch=1,EE,21F70684,extended,0C0B512C // jal SetClearance
-patch=1,EE,21F70688,extended,3406000E // li a2, 14
+patch=1,EE,21F70680,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70684,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70688,extended,3405000B // li a1, 11
+patch=1,EE,21F7068C,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70690,extended,3406000E // li a2, 14
 
-// === Loop start (0x68C) ===
+// === Loop start (0x694) ===
 // SetColor black shadow
-patch=1,EE,21F7068C,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F70690,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F70694,extended,3C058000 // lui a1, 0x8000
-patch=1,EE,21F70698,extended,0C0B5148 // jal SetColor
-patch=1,EE,21F7069C,extended,00000000 // nop
+patch=1,EE,21F70694,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70698,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F7069C,extended,3C058000 // lui a1, 0x8000
+patch=1,EE,21F706A0,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F706A4,extended,00000000 // nop
 
 // DrawDirect shadow (x=11, y=s3+1)
-patch=1,EE,21F706A0,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F706A4,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F706A8,extended,02402825 // move a1, s2     str ptr
-patch=1,EE,21F706AC,extended,3406000B // li a2, 11
-patch=1,EE,21F706B0,extended,0C0B5688 // jal DrawDirect
-patch=1,EE,21F706B4,extended,26670001 // addiu a3, s3, 1 (delay: y+1)
+patch=1,EE,21F706A8,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F706AC,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F706B0,extended,02402825 // move a1, s2     str ptr
+patch=1,EE,21F706B4,extended,3406000B // li a2, 11
+patch=1,EE,21F706B8,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F706BC,extended,26670001 // addiu a3, s3, 1 (delay: y+1)
 
 // SetColor light gray
-patch=1,EE,21F706B8,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F706BC,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F706C0,extended,3C0580E0 // lui a1, 0x80E0
-patch=1,EE,21F706C4,extended,0C0B5148 // jal SetColor
-patch=1,EE,21F706C8,extended,34A5E0E0 // ori a1, 0xE0E0
+patch=1,EE,21F706C0,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F706C4,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F706C8,extended,3C0580E0 // lui a1, 0x80E0
+patch=1,EE,21F706CC,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F706D0,extended,34A5E0E0 // ori a1, 0xE0E0
 
 // DrawDirect main text (x=10, y=s3)
-patch=1,EE,21F706CC,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F706D0,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F706D4,extended,02402825 // move a1, s2     str ptr
-patch=1,EE,21F706D8,extended,3406000A // li a2, 10
-patch=1,EE,21F706DC,extended,0C0B5688 // jal DrawDirect
-patch=1,EE,21F706E0,extended,02603825 // move a3, s3     y (delay)
+patch=1,EE,21F706D4,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F706D8,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F706DC,extended,02402825 // move a1, s2     str ptr
+patch=1,EE,21F706E0,extended,3406000A // li a2, 10
+patch=1,EE,21F706E4,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F706E8,extended,02603825 // move a3, s3     y (delay)
 
 // s0++, s2 += 64, s3 += 16
-patch=1,EE,21F706E4,extended,26100001 // addiu s0, s0, 1
-patch=1,EE,21F706E8,extended,26520040 // addiu s2, s2, 64
-patch=1,EE,21F706EC,extended,26730010 // addiu s3, s3, 16
+patch=1,EE,21F706EC,extended,26100001 // addiu s0, s0, 1
+patch=1,EE,21F706F0,extended,26520040 // addiu s2, s2, 64
+patch=1,EE,21F706F4,extended,26730010 // addiu s3, s3, 16
 
-// if s0 < s1, loop back to 68C
-patch=1,EE,21F706F0,extended,0211082A // slt at, s0, s1
-// bne at,zero,68C; off=(68C-6F8)/4 = -0x1B (signed)
-patch=1,EE,21F706F4,extended,1420FFE5 // bne at, zero, 68C
-patch=1,EE,21F706F8,extended,00000000 // nop
+// if s0 < s1, loop back to 694
+patch=1,EE,21F706F8,extended,0211082A // slt at, s0, s1
+// bne at,zero,694; off=(694-700)/4 = -0x1B (signed)
+patch=1,EE,21F706FC,extended,1420FFE5 // bne at, zero, 694
+patch=1,EE,21F70700,extended,00000000 // nop
 
-// === Restore font (0x6FC) ===
+// === Restore font (0x704) ===
 // SetDrawSize(16, 20)
-patch=1,EE,21F706FC,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F70700,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F70704,extended,34050010 // li a1, 16
-patch=1,EE,21F70708,extended,0C0B5128 // jal SetDrawSize
-patch=1,EE,21F7070C,extended,34060014 // li a2, 20
+patch=1,EE,21F70704,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70708,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F7070C,extended,34050010 // li a1, 16
+patch=1,EE,21F70710,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F70714,extended,34060014 // li a2, 20
 
 // SetClearance(15, 18)
-patch=1,EE,21F70710,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F70714,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F70718,extended,3405000F // li a1, 15
-patch=1,EE,21F7071C,extended,0C0B512C // jal SetClearance
-patch=1,EE,21F70720,extended,34060012 // li a2, 18
+patch=1,EE,21F70718,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F7071C,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70720,extended,3405000F // li a1, 15
+patch=1,EE,21F70724,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70728,extended,34060012 // li a2, 18
 
-// === Epilogue (0x724) ===
-patch=1,EE,21F70724,extended,8FB30010 // lw s3, 16(sp)
-patch=1,EE,21F70728,extended,8FB2000C // lw s2, 12(sp)
-patch=1,EE,21F7072C,extended,8FB10008 // lw s1, 8(sp)
-patch=1,EE,21F70730,extended,8FB00004 // lw s0, 4(sp)
-patch=1,EE,21F70734,extended,8FBF0000 // lw ra, 0(sp)
-patch=1,EE,21F70738,extended,03E00008 // jr ra
-patch=1,EE,21F7073C,extended,27BD0030 // addiu sp, sp, 48 (delay)
+// === Epilogue (0x72C) ===
+patch=1,EE,21F7072C,extended,8FB30010 // lw s3, 16(sp)
+patch=1,EE,21F70730,extended,8FB2000C // lw s2, 12(sp)
+patch=1,EE,21F70734,extended,8FB10008 // lw s1, 8(sp)
+patch=1,EE,21F70738,extended,8FB00004 // lw s0, 4(sp)
+patch=1,EE,21F7073C,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F70740,extended,03E00008 // jr ra
+patch=1,EE,21F70744,extended,27BD0030 // addiu sp, sp, 48 (delay)

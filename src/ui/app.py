@@ -48,6 +48,7 @@ class App:
         from core.version import get_version
         from game.dialog import Dialog
         self.dialog = Dialog(state.mem, self.root)
+        self.manager.dialog = self.dialog
         self.root.title(f"Dark Cloud 2 Reforged {get_version()}")
         self.root.geometry("720x500")
         self.root.configure(bg=BG)
@@ -379,7 +380,7 @@ class App:
         self._set_bool(self.flags_fields, "Mod Flag", snap.flags.mod_active)
         self._set_bool(self.flags_fields, "Enhanced Save", snap.flags.enhanced_save)
 
-        if snap.loop_no == 1:
+        if snap.loop_no == 2:
             self._set(self.dng_fields, "Status", str(snap.dungeon.status))
         else:
             self._set(self.dng_fields, "Status", "—")
@@ -613,18 +614,12 @@ class App:
     }
 
     def _test_dialog(self):
-        """Debug: show floor condition data."""
-        try:
-            from game import hud
-            floor_info = hud._get_floor_info(self.state.mem)
-            if floor_info:
-                cond_type = self.state.mem.read_byte(floor_info + 0x1a)
-                cond_param = self.state.mem.read_int(floor_info + 0x1c)
-                log.info(f"Floor condition: type={cond_type}, param={cond_param}")
-            else:
-                log.info("No floor info available")
-        except Exception as e:
-            log.error(f"Debug failed: {e}")
+        self.dialog.ask("Do you want a DC2 mod?", callback=self._on_answer)
+
+    def _on_answer(self, choice):
+        self.dialog.show("You chose: " + ("Yes" if choice else "No"), duration=10, mode=0)
+        import time; time.sleep(3)
+        self.dialog.show("You chose: " + ("Yes" if choice else "No"), duration=10, mode=4)
 
     def _options_auto_poll(self):
         """Auto-detect options screen and inject custom rows."""
@@ -1076,7 +1071,6 @@ class App:
         self.manager.auto_key = enabled
         settings.set("auto_key", enabled)
         self._auto_key_var.set(enabled)
-        self.state.mem.write_int(addr.AUTO_KEY_FLAG, 1 if enabled else 0)
 
     def _init_map_pos(self):
         label = self._map_pos_var.get()

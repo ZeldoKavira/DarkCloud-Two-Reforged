@@ -10,6 +10,7 @@ log = logging.getLogger(__name__)
 _MEDAL_TIME = 0x10
 _MEDAL_SPHIDA = 0x80
 _MEDAL_CHALLENGE = 0x08
+_MEDAL_FISH = 0x20
 
 _PINE = 0x20000000
 _TREE_DNGMAP = 0x2037843C
@@ -45,6 +46,7 @@ _VIOLATION_MASK = {
 _start_kills = None
 _last_floor_ptr = None
 _frozen_time = None
+_last_start_time = None
 
 
 def _get_floor_info(mem):
@@ -126,6 +128,7 @@ def write_hud(mem, loop_no):
     elapsed = 0
     usage = 0
     all_dead = False
+    start_time = 0
     if battle_ptr != 0:
         battle_ptr = _PINE + battle_ptr
         play_time = mem.read_int(addr.SAVE_DATA_BASE + 0x1a00)
@@ -135,6 +138,12 @@ def write_hud(mem, loop_no):
             elapsed = 0
         usage = mem.read_int(battle_ptr + 0x98)
         all_dead = mem.read_int(battle_ptr + 0x5c) == 1
+
+    # Reset frozen time when floor changes (detected by start_time changing)
+    global _last_start_time
+    if start_time != _last_start_time:
+        _frozen_time = None
+        _last_start_time = start_time
 
     # Freeze timer when all dead
     if all_dead and _frozen_time is None:
@@ -166,6 +175,10 @@ def write_hud(mem, loop_no):
     # Sphida
     m = "* " if medal_flags & _MEDAL_SPHIDA else "- "
     lines.append(f"{m}Sphida")
+
+    # Fishing
+    m = "* " if medal_flags & _MEDAL_FISH else "- "
+    lines.append(f"{m}Fishing")
 
     # Floor condition
     m = "* " if medal_flags & _MEDAL_CHALLENGE else "- "

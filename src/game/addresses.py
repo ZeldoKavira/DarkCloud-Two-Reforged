@@ -9,8 +9,8 @@ gp = 0x0037E4F0, PINE base = 0x20000000.
 class Mode:
     """LoopNo values — the main game loop state."""
     EXIT = 0
-    DUNGEON = 1
-    TOWN = 2
+    TOWN = 1        # EditLoop (town / georama / overworld)
+    DUNGEON = 2     # LoopDungeonMain
     TITLE = 3       # Title screen / startup
 
 
@@ -273,10 +273,6 @@ HUD_LINE_COUNT = 0x21F70044         # Number of lines to draw (max 6)
 # --- Auto repair powder ---
 AUTO_REPAIR_FLAG = 0x21F70048       # 1=auto-repair enabled (set by Python)
 REPAIR_CONSUMED = 0x21F7004C        # Set by PNACH cave: 1=melee powder used, 2=ranged powder used
-
-# --- Auto key (dungeon door) ---
-AUTO_KEY_FLAG = 0x21F70050          # 1=auto-key enabled (set by Python)
-KEY_CONSUMED = 0x21F70054           # Set by PNACH cave: box_index+1 when key used (0=none)
 
 # --- Weapon / ABS data ---
 # BattleParamater (CBattleCharaInfo) at 0x01E9B130

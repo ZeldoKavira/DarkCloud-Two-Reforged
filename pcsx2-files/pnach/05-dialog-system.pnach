@@ -25,13 +25,13 @@ patch=1,EE,21F70428,extended,00000000 // nop
 patch=1,EE,21F7042C,extended,00408025 // move s0, v0
 patch=1,EE,21F70430,extended,3C0201F7 // lui v0, 0x01F7
 patch=1,EE,21F70434,extended,AC400030 // sw zero, 0x0030(v0)
-// s1 = mode, clear, default 4
+// s1 = mode from DIALOG_MODE (Python always sets this)
 patch=1,EE,21F70438,extended,3C0201F7 // lui v0, 0x01F7
 patch=1,EE,21F7043C,extended,8C510038 // lw s1, 0x0038(v0)
 patch=1,EE,21F70440,extended,AC400038 // sw zero, 0x0038(v0)
-patch=1,EE,21F70444,extended,16200002 // bne s1, zero, +2
+patch=1,EE,21F70444,extended,00000000 // nop
 patch=1,EE,21F70448,extended,00000000 // nop
-patch=1,EE,21F7044C,extended,34110004 // li s1, 4
+patch=1,EE,21F7044C,extended,00000000 // nop
 // GetSystemMessage(0)
 patch=1,EE,21F70450,extended,0C0659E0 // jal GetSystemMessage
 patch=1,EE,21F70454,extended,34040000 // li a0, 0

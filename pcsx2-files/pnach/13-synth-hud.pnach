@@ -3,85 +3,86 @@
 //
 // Chains: this cave -> HUD overlay cave (0x01F70600) -> DngMainDraw
 // Checks HUD_FLAG AND anim float >= 1.0 before drawing
-// Cave at 0x01F70D00
+// Cave at 0x01F70F50
 
 // Override HUD overlay hook
-patch=1,EE,201CEB70,extended,0C7DC340 // jal 0x01F70D00
+patch=1,EE,201CEB70,extended,0C7DC3D4 // jal 0x01F70F50
 
 // D00 prologue
-patch=1,EE,21F70D00,extended,27BDFFD0 // addiu sp, -48
-patch=1,EE,21F70D04,extended,AFBF0000 // sw ra, 0(sp)
-patch=1,EE,21F70D08,extended,AFB00004 // sw s0, 4(sp)
+patch=1,EE,21F70F50,extended,27BDFFD0 // addiu sp, -48
+patch=1,EE,21F70F54,extended,AFBF0000 // sw ra, 0(sp)
+patch=1,EE,21F70F58,extended,AFB00004 // sw s0, 4(sp)
 // D0C call HUD overlay
-patch=1,EE,21F70D0C,extended,0C7DC180 // jal 0x01F70600
-patch=1,EE,21F70D10,extended,00000000 // nop
+patch=1,EE,21F70F5C,extended,0C7DC180 // jal 0x01F70600
+patch=1,EE,21F70F60,extended,00000000 // nop
 // D14 check HUD_FLAG
-patch=1,EE,21F70D14,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F70D18,extended,8C420040 // lw v0, 0x0040(v0)
-// D1C beq v0,zero -> epilogue @DE4; off=(DE4-D20)/4=0x31
-patch=1,EE,21F70D1C,extended,10400031 // beq v0, zero, DE4
-patch=1,EE,21F70D20,extended,00000000 // nop
-// D24 check anim float >= 1.0
-patch=1,EE,21F70D24,extended,8F828DB0 // lw v0, -0x7250(gp)
-patch=1,EE,21F70D28,extended,8C42004C // lw v0, 0x4C(v0)
-patch=1,EE,21F70D2C,extended,3C013F80 // lui at, 0x3F80
-patch=1,EE,21F70D30,extended,0041082A // slt at, v0, at
-// D34 bne at,zero -> epilogue @DE4; off=(DE4-D38)/4=0x2B
-patch=1,EE,21F70D34,extended,1420002B // bne at, zero, DE4
-patch=1,EE,21F70D38,extended,00000000 // nop
-// D3C s0=CFont
-patch=1,EE,21F70D3C,extended,3C10003E // lui s0, 0x003E
-patch=1,EE,21F70D40,extended,26108090 // addiu s0, -0x7F70
-// D44 SetDrawSize(10,10)
-patch=1,EE,21F70D44,extended,02002025 // move a0, s0
-patch=1,EE,21F70D48,extended,3405000A // li a1, 10
-patch=1,EE,21F70D4C,extended,0C0B5128 // jal SetDrawSize
-patch=1,EE,21F70D50,extended,3406000A // li a2, 10
-// D54 SetClearance(9,10)
-patch=1,EE,21F70D54,extended,02002025 // move a0, s0
-patch=1,EE,21F70D58,extended,34050009 // li a1, 9
-patch=1,EE,21F70D5C,extended,0C0B512C // jal SetClearance
-patch=1,EE,21F70D60,extended,3406000A // li a2, 10
-// D64 SetColor black
-patch=1,EE,21F70D64,extended,02002025 // move a0, s0
-patch=1,EE,21F70D68,extended,3C058000 // lui a1, 0x8000
-patch=1,EE,21F70D6C,extended,0C0B5148 // jal SetColor
-patch=1,EE,21F70D70,extended,00000000 // nop
-// D74 Shadow melee (303,40)
-patch=1,EE,21F70D74,extended,02002025 // move a0, s0
-patch=1,EE,21F70D78,extended,3C0501F7 // lui a1, 0x01F7
-patch=1,EE,21F70D7C,extended,34A50058 // ori a1, 0x0058
-patch=1,EE,21F70D80,extended,3406012F // li a2, 303
-patch=1,EE,21F70D84,extended,0C0B5688 // jal DrawDirect
-patch=1,EE,21F70D88,extended,34070028 // li a3, 40
-// D8C Shadow ranged (471,40)
-patch=1,EE,21F70D8C,extended,02002025 // move a0, s0
-patch=1,EE,21F70D90,extended,3C0501F7 // lui a1, 0x01F7
-patch=1,EE,21F70D94,extended,34A50068 // ori a1, 0x0068
-patch=1,EE,21F70D98,extended,340601D7 // li a2, 471
-patch=1,EE,21F70D9C,extended,0C0B5688 // jal DrawDirect
-patch=1,EE,21F70DA0,extended,34070028 // li a3, 40
-// DA4 SetColor yellow
-patch=1,EE,21F70DA4,extended,02002025 // move a0, s0
-patch=1,EE,21F70DA8,extended,3C058000 // lui a1, 0x8000
-patch=1,EE,21F70DAC,extended,0C0B5148 // jal SetColor
-patch=1,EE,21F70DB0,extended,34A5FFFF // ori a1, 0xFFFF
-// DB4 Main melee (302,39)
-patch=1,EE,21F70DB4,extended,02002025 // move a0, s0
-patch=1,EE,21F70DB8,extended,3C0501F7 // lui a1, 0x01F7
-patch=1,EE,21F70DBC,extended,34A50058 // ori a1, 0x0058
-patch=1,EE,21F70DC0,extended,3406012E // li a2, 302
-patch=1,EE,21F70DC4,extended,0C0B5688 // jal DrawDirect
-patch=1,EE,21F70DC8,extended,34070027 // li a3, 39
-// DCC Main ranged (470,39)
-patch=1,EE,21F70DCC,extended,02002025 // move a0, s0
-patch=1,EE,21F70DD0,extended,3C0501F7 // lui a1, 0x01F7
-patch=1,EE,21F70DD4,extended,34A50068 // ori a1, 0x0068
-patch=1,EE,21F70DD8,extended,340601D6 // li a2, 470
-patch=1,EE,21F70DDC,extended,0C0B5688 // jal DrawDirect
-patch=1,EE,21F70DE0,extended,34070027 // li a3, 39
-// DE4 epilogue
-patch=1,EE,21F70DE4,extended,8FB00004 // lw s0, 4(sp)
-patch=1,EE,21F70DE8,extended,8FBF0000 // lw ra, 0(sp)
-patch=1,EE,21F70DEC,extended,03E00008 // jr ra
-patch=1,EE,21F70DF0,extended,27BD0030 // addiu sp, 48
+patch=1,EE,21F70F64,extended,3C0201F7 // lui v0, 0x01F7
+patch=1,EE,21F70F68,extended,8C420040 // lw v0, 0x0040(v0)
+// D1C beq v0,zero -> epilogue @DE8; off=(DE8-D20)/4=0x32
+patch=1,EE,21F70F6C,extended,10400032 // beq v0, zero, DE8
+patch=1,EE,21F70F70,extended,00000000 // nop
+// D24 check anim float >= 1.0 (with null check for BattleAreaScene)
+patch=1,EE,21F70F74,extended,8F828DB0 // lw v0, -0x7250(gp)
+patch=1,EE,21F70F78,extended,10400005 // beq v0, zero, F90 (null → skip anim, draw anyway)
+patch=1,EE,21F70F7C,extended,00000000 // nop
+patch=1,EE,21F70F80,extended,8C42004C // lw v0, 0x4C(v0)     ; anim float
+// compare v0 < 1.0f; bne → epilogue with s0=CFont in delay
+patch=1,EE,21F70F84,extended,3C013F80 // lui at, 0x3F80
+patch=1,EE,21F70F88,extended,0041082A // slt at, v0, at
+// bne at,zero -> epilogue @1038; off=(1038-F90)/4=0x2A
+patch=1,EE,21F70F8C,extended,1420002A // bne at, zero, 1038
+patch=1,EE,21F70F90,extended,3C10003E // lui s0, 0x003E  (delay: s0=CFont hi)
+// D44 s0=CFont lo + SetDrawSize(10,10)
+patch=1,EE,21F70F94,extended,26108090 // addiu s0, -0x7F70   ; s0 = 0x003D8090
+patch=1,EE,21F70F98,extended,02002025 // move a0, s0
+patch=1,EE,21F70F9C,extended,3405000A // li a1, 10
+patch=1,EE,21F70FA0,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F70FA4,extended,3406000A // li a2, 10  (delay)
+// D58 SetClearance(9,10)
+patch=1,EE,21F70FA8,extended,02002025 // move a0, s0
+patch=1,EE,21F70FAC,extended,34050009 // li a1, 9
+patch=1,EE,21F70FB0,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70FB4,extended,3406000A // li a2, 10  (delay)
+// D68 SetColor black
+patch=1,EE,21F70FB8,extended,02002025 // move a0, s0
+patch=1,EE,21F70FBC,extended,3C058000 // lui a1, 0x8000
+patch=1,EE,21F70FC0,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F70FC4,extended,00000000 // nop
+// D78 Shadow melee (303,40)
+patch=1,EE,21F70FC8,extended,02002025 // move a0, s0
+patch=1,EE,21F70FCC,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F70FD0,extended,34A50058 // ori a1, 0x0058
+patch=1,EE,21F70FD4,extended,3406012F // li a2, 303
+patch=1,EE,21F70FD8,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70FDC,extended,34070028 // li a3, 40
+// D90 Shadow ranged (471,40)
+patch=1,EE,21F70FE0,extended,02002025 // move a0, s0
+patch=1,EE,21F70FE4,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F70FE8,extended,34A50068 // ori a1, 0x0068
+patch=1,EE,21F70FEC,extended,340601D7 // li a2, 471
+patch=1,EE,21F70FF0,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70FF4,extended,34070028 // li a3, 40
+// DA8 SetColor yellow
+patch=1,EE,21F70FF8,extended,02002025 // move a0, s0
+patch=1,EE,21F70FFC,extended,3C058000 // lui a1, 0x8000
+patch=1,EE,21F71000,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F71004,extended,34A5FFFF // ori a1, 0xFFFF
+// DB8 Main melee (302,39)
+patch=1,EE,21F71008,extended,02002025 // move a0, s0
+patch=1,EE,21F7100C,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F71010,extended,34A50058 // ori a1, 0x0058
+patch=1,EE,21F71014,extended,3406012E // li a2, 302
+patch=1,EE,21F71018,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F7101C,extended,34070027 // li a3, 39
+// DD0 Main ranged (470,39)
+patch=1,EE,21F71020,extended,02002025 // move a0, s0
+patch=1,EE,21F71024,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F71028,extended,34A50068 // ori a1, 0x0068
+patch=1,EE,21F7102C,extended,340601D6 // li a2, 470
+patch=1,EE,21F71030,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F71034,extended,34070027 // li a3, 39
+// DE8 epilogue
+patch=1,EE,21F71038,extended,8FB00004 // lw s0, 4(sp)
+patch=1,EE,21F7103C,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F71040,extended,03E00008 // jr ra
+patch=1,EE,21F71044,extended,27BD0030 // addiu sp, 48
