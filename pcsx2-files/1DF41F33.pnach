@@ -39,10 +39,6 @@ patch=1,EE,E0030003,extended,00376FCC
 patch=1,EE,E0020001,extended,006FBA40
 patch=1,EE,E0010000,extended,00377E98
 patch=1,EE,10377E98,extended,00000001
-// If FAST_START && LoopNo==3 → set TitleSelectInit=1 (Continue)
-patch=1,EE,E0020001,extended,01F70028
-patch=1,EE,E0010003,extended,00376FCC
-patch=1,EE,10377E30,extended,00000001
 
 // ======== 03-title-screen ========
 // Hook control: swap TitleModeDraw call based on title screen state
@@ -639,10 +635,6 @@ patch=1,EE,21F70F3C,extended,8FB00004
 patch=1,EE,21F70F40,extended,8FBF0000
 patch=1,EE,21F70F44,extended,03E00008
 patch=1,EE,21F70F48,extended,27BD0040
-
-// ======== 12-auto-key ========
-// Auto Key — DISABLED (gate interaction is script-driven, handled by Python)
-// No PNACH hooks needed — Python monitors event 0x12C
 
 // ======== 13-synth-hud ========
 // Synthesis points HUD — draws pending synth points on weapon icons

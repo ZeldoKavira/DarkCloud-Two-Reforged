@@ -7,8 +7,8 @@ PCSX2_CONFIG="$HOME/.config/PCSX2"
 PCSX2_URL="https://github.com/PCSX2/pcsx2/releases/download/v2.6.3/pcsx2-v2.6.3-linux-appimage-x64-Qt.AppImage"
 MOD_REPO="ZeldoKavira/DarkCloud-Two-Reforged"
 PNACH_NAME="1DF41F33.pnach"
-ISO_NAME="Dark Cloud 2 (USA).iso"
 INI_NAME="SCUS-97213_1DF41F33.ini"
+ISO_NAME="Dark Cloud 2 (USA).iso"
 SCRIPT_URL="https://raw.githubusercontent.com/$MOD_REPO/main/scripts/steamdeck-setup.sh"
 LOCAL_SCRIPT="$BASE_DIR/steamdeck-setup.sh"
 VERSION_FILE="$BASE_DIR/.mod-version"
@@ -24,24 +24,19 @@ mkdir -p "$BASE_DIR"
 # ── Update config ────────────────────────────────────────────────────────────
 if [[ ! -f "$UPDATE_CONFIG" ]]; then
     cat > "$UPDATE_CONFIG" <<'CFGEOF'
-# Dark Cloud 2 Reforged - Update Configuration
+# DC2 Reforged - Update Configuration
 # Set to "false" to disable auto-updates for that component.
 
-# Auto-update the PCSX2 game settings INI
-auto_update_gamesettings=true
-
-# Auto-update the mod binary and PNACH cheats file
 auto_update_mod=true
-
-# Auto-update this launcher script
 auto_update_script=true
+auto_update_gamesettings=true
 CFGEOF
     info "Created update config at $UPDATE_CONFIG"
 fi
 
-auto_update_gamesettings=true
 auto_update_mod=true
 auto_update_script=true
+auto_update_gamesettings=true
 source "$UPDATE_CONFIG"
 
 # ── 0. Self-install & self-update ────────────────────────────────────────────
@@ -62,7 +57,8 @@ else
     info "Script auto-update disabled."
 fi
 
-if [[ -z "${BASH_SOURCE[0]:-}" ]] || [[ "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null)" != "$(realpath "$LOCAL_SCRIPT" 2>/dev/null)" ]]; then
+CURRENT_SCRIPT="${BASH_SOURCE[0]:-}"
+if [[ -z "$CURRENT_SCRIPT" ]] || [[ "$(realpath "$CURRENT_SCRIPT" 2>/dev/null)" != "$(realpath "$LOCAL_SCRIPT" 2>/dev/null)" ]]; then
     if [[ -f "$LOCAL_SCRIPT" ]]; then
         exec bash "$LOCAL_SCRIPT" "$@" </dev/tty
     fi
@@ -84,50 +80,55 @@ else
     info "PCSX2 is up to date."
 fi
 
-# ── 2. Download latest Linux mod release ─────────────────────────────────────
+# ── 2. Download latest pre-release (mod binary + PNACH) ─────────────────────
 MOD_BIN="$BASE_DIR/DC2-Reforged"
+CHEATS_DIR="$PCSX2_CONFIG/cheats"
+mkdir -p "$CHEATS_DIR"
+
 if [[ "$auto_update_mod" == "true" ]]; then
-    info "Fetching latest mod release..."
+    info "Fetching latest pre-release..."
 
-LATEST_URL=$(curl -s "https://api.github.com/repos/$MOD_REPO/releases/latest" \
-    | grep -o '"browser_download_url": *"[^"]*Linux[^"]*\.zip"' \
-    | head -1 \
-    | cut -d'"' -f4 || true)
-
-if [[ -z "$LATEST_URL" ]]; then
+    # Get the latest pre-release Linux zip URL
     LATEST_URL=$(curl -s "https://api.github.com/repos/$MOD_REPO/releases" \
         | grep -o '"browser_download_url": *"[^"]*Linux[^"]*\.zip"' \
         | head -1 \
         | cut -d'"' -f4 || true)
-fi
 
-if [[ -n "$LATEST_URL" ]]; then
-    INSTALLED_URL=""
-    [[ -f "$VERSION_FILE" ]] && INSTALLED_URL=$(cat "$VERSION_FILE")
+    if [[ -n "$LATEST_URL" ]]; then
+        INSTALLED_URL=""
+        [[ -f "$VERSION_FILE" ]] && INSTALLED_URL=$(cat "$VERSION_FILE")
 
-    if [[ "$LATEST_URL" != "$INSTALLED_URL" ]]; then
-        info "Downloading $LATEST_URL"
-        if curl -fL -o "$BASE_DIR/mod.zip" "$LATEST_URL"; then
-            unzip -o "$BASE_DIR/mod.zip" -d "$BASE_DIR"
-            rm "$BASE_DIR/mod.zip"
-            chmod +x "$MOD_BIN"
-            echo "$LATEST_URL" > "$VERSION_FILE"
-            info "Mod updated."
-        elif [[ -f "$MOD_BIN" ]]; then
-            warn "Download failed, using existing version."
+        if [[ "$LATEST_URL" != "$INSTALLED_URL" ]]; then
+            info "Downloading $LATEST_URL"
+            if curl -fL -o "$BASE_DIR/mod.zip" "$LATEST_URL"; then
+                unzip -o "$BASE_DIR/mod.zip" -d "$BASE_DIR/mod-tmp"
+                # Move binary
+                mv "$BASE_DIR/mod-tmp/DC2-Reforged-Linux" "$MOD_BIN" 2>/dev/null \
+                    || mv "$BASE_DIR"/mod-tmp/DC2-Reforged* "$MOD_BIN" 2>/dev/null || true
+                # Move PNACH
+                if [[ -f "$BASE_DIR/mod-tmp/$PNACH_NAME" ]]; then
+                    mv "$BASE_DIR/mod-tmp/$PNACH_NAME" "$CHEATS_DIR/$PNACH_NAME"
+                    info "PNACH installed."
+                fi
+                rm -rf "$BASE_DIR/mod-tmp" "$BASE_DIR/mod.zip"
+                chmod +x "$MOD_BIN"
+                echo "$LATEST_URL" > "$VERSION_FILE"
+                info "Mod updated."
+            elif [[ -f "$MOD_BIN" ]]; then
+                warn "Download failed, using existing version."
+            else
+                error "Download failed and no existing version found."
+                exit 1
+            fi
         else
-            error "Download failed and no existing version found."
-            exit 1
+            info "Mod is up to date."
         fi
+    elif [[ -f "$MOD_BIN" ]]; then
+        warn "Could not find a release, using existing version."
     else
-        info "Mod is up to date."
+        error "Could not find a Linux release. Check https://github.com/$MOD_REPO/releases"
+        exit 1
     fi
-elif [[ -f "$MOD_BIN" ]]; then
-    warn "Could not find a release, using existing version."
-else
-    error "Could not find a Linux release. Check https://github.com/$MOD_REPO/releases"
-    exit 1
-fi
 else
     info "Mod auto-update disabled."
     if [[ ! -f "$MOD_BIN" ]]; then
@@ -165,10 +166,6 @@ if [[ "$auto_update_gamesettings" == "true" ]]; then
     fi
 else
     info "Game settings INI auto-update disabled."
-    if [[ ! -f "$GS_DIR/$INI_NAME" ]]; then
-        error "No game settings INI found and auto-update is disabled."
-        exit 1
-    fi
 fi
 
 # ── 5. Check BIOS ───────────────────────────────────────────────────────────
@@ -184,34 +181,10 @@ while ! ls "$BIOS_DIR"/*.bin &>/dev/null; do
 done
 info "BIOS found."
 
-# ── 6. Install PNACH (cheats) ───────────────────────────────────────────────
-CHEATS_DIR="$PCSX2_CONFIG/cheats"
-mkdir -p "$CHEATS_DIR"
-if [[ "$auto_update_mod" == "true" ]]; then
-    info "Downloading PNACH from repo..."
-    if curl -fsSL -o "$CHEATS_DIR/$PNACH_NAME.tmp" \
-        "https://raw.githubusercontent.com/$MOD_REPO/main/pcsx2-files/$PNACH_NAME"; then
-        mv "$CHEATS_DIR/$PNACH_NAME.tmp" "$CHEATS_DIR/$PNACH_NAME"
-        info "PNACH updated."
-    elif [[ -f "$CHEATS_DIR/$PNACH_NAME" ]]; then
-        rm -f "$CHEATS_DIR/$PNACH_NAME.tmp"
-        warn "Download failed, using existing PNACH."
-    else
-        error "Could not download PNACH and no existing version found."
-        exit 1
-    fi
-else
-    info "PNACH auto-update disabled."
-    if [[ ! -f "$CHEATS_DIR/$PNACH_NAME" ]]; then
-        error "No PNACH found and auto-update is disabled."
-        exit 1
-    fi
-fi
-
-# ── 7. Add to Steam ─────────────────────────────────────────────────────────
+# ── 6. Add to Steam ─────────────────────────────────────────────────────────
 DESKTOP_FILE="$HOME/.local/share/applications/DC2Reforged.desktop"
 if [[ ! -f "$DESKTOP_FILE" ]]; then
-    info "Adding Dark Cloud 2 Reforged to Steam..."
+    info "Adding DC2 Reforged to Steam..."
     mkdir -p "$HOME/.local/share/applications"
     cat > "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
@@ -224,24 +197,22 @@ Comment=Dark Cloud 2 Reforged Mod via PCSX2
 EOF
     chmod +x "$DESKTOP_FILE"
     echo ""
-    info "Setup complete! To add Dark Cloud 2 Reforged to your Steam library:"
+    info "Setup complete! To add DC2 Reforged to your Steam library:"
     echo "  1. Open Steam in Desktop Mode"
     echo "  2. Click 'Add a Game' (bottom-left) → 'Add a Non-Steam Game'"
     echo "  3. Check 'Dark Cloud 2 Reforged' from the list"
     echo "  4. Click 'Add Selected Programs'"
     echo ""
-    echo "It will then appear in your library and work in Gaming Mode."
-    echo ""
     read -rp "Would you like to launch the game now? [y/N] " LAUNCH </dev/tty
     if [[ ! "$LAUNCH" =~ ^[Yy]$ ]]; then
-        info "Done! Launch Dark Cloud 2 Reforged from Steam whenever you're ready."
+        info "Done! Launch DC2 Reforged from Steam whenever you're ready."
         exit 0
     fi
 else
     info "Steam shortcut already exists."
 fi
 
-# ── 8. Launch ────────────────────────────────────────────────────────────────
+# ── 7. Launch ────────────────────────────────────────────────────────────────
 DEV_SRC="$BASE_DIR/dev/src/main.py"
 if [[ -f "$DEV_SRC" ]]; then
     info "Dev source detected, running from src/..."
