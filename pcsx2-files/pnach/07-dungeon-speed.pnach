@@ -7,7 +7,7 @@ patch=1,EE,20171438,extended,0C7DC1E0 // jal cave 0x01F70780
 
 // === Code cave at 0x01F70780 ===
 // Load multiplier via lui+mtc1 (Python patches the lui immediate)
-patch=1,EE,21F70780,extended,3C023F80 // lui v0, 0x3F80  (1.0 default, patched by Python)
+patch=0,EE,21F70780,extended,3C023F80 // lui v0, 0x3F80  (1.0 default, patched by Python) - patch=0 so Python can override
 patch=1,EE,21F70784,extended,44820000 // mtc1 v0, f0
 
 // Scale vx

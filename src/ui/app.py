@@ -30,11 +30,13 @@ class App:
         self.state = state
         self.manager = ModManager(state.mem, state)
         self.manager.on_options_loaded = self._on_options_loaded
+        self.manager.on_early_texture_patch = self._early_texture_patch
         self._opts_injected = False
         self._custom_rows = []
         self._last_opt_vals = {}
         self._btn_uvs = []
         self._btn_part_addrs = {}  # (row_i, btn_idx) -> PINE addr
+        self._last_desc = ""
 
         # Load saved settings
         self.manager.fast_start = settings.get("fast_start") or False
@@ -231,6 +233,14 @@ class App:
         ttk.Label(opts, text="Automatically use key on locked doors when pressing X",
                   style="Dim.TLabel").pack(anchor=tk.W, padx=20)
 
+        self._synth_hud_var = tk.BooleanVar(value=settings.get("synth_hud") is not False)
+        tk.Checkbutton(opts, text="Show Synthesis Points", variable=self._synth_hud_var,
+                       command=self._toggle_synth_hud, bg=BG_PANEL, fg=FG,
+                       selectcolor=BG, activebackground=BG_PANEL, activeforeground=FG,
+                       font=("Helvetica", 10)).pack(anchor=tk.W, pady=(8, 2))
+        ttk.Label(opts, text="Display pending synthesis points on weapon icons",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
         # Town speed
         speed_row = ttk.Frame(opts, style="Panel.TFrame")
         speed_row.pack(anchor=tk.W, pady=(8, 2))
@@ -412,6 +422,10 @@ class App:
         val = self._auto_key_var.get()
         self.manager.auto_key = val
         settings.set("auto_key", val)
+
+    def _toggle_synth_hud(self):
+        val = self._synth_hud_var.get()
+        settings.set("synth_hud", val)
 
     def _set_run_speed(self):
         label = self._speed_var.get()
@@ -599,8 +613,18 @@ class App:
     }
 
     def _test_dialog(self):
-        """Manual inject trigger."""
-        self._options_inject()
+        """Debug: show floor condition data."""
+        try:
+            from game import hud
+            floor_info = hud._get_floor_info(self.state.mem)
+            if floor_info:
+                cond_type = self.state.mem.read_byte(floor_info + 0x1a)
+                cond_param = self.state.mem.read_int(floor_info + 0x1c)
+                log.info(f"Floor condition: type={cond_type}, param={cond_param}")
+            else:
+                log.info("No floor info available")
+        except Exception as e:
+            log.error(f"Debug failed: {e}")
 
     def _options_auto_poll(self):
         """Auto-detect options screen and inject custom rows."""
@@ -631,9 +655,37 @@ class App:
             count = self.state.mem.read_short(op + 0x68)
             if count <= 33:
                 self._inject_custom_rows(pine, op, count)
+            else:
+                # Rows already injected, but re-inject textures (may have been reloaded)
+                self._reinject_btn_textures()
             self._pine = pine
             self._opts_injected = True
             self._last_opt_vals = {}
+            # Find help message text address for description swapping
+            self._orig_help_text = [
+                0xFD1A,0x0037,0x0047,0x0048,0x004B,0x0044,0xFF02,0x0047,0x004E,0x004B,
+                0x0043,0x0048,0x004D,0x0046,0xFF02,0xFD03,0xFF02,0x004F,0x0051,0x0044,
+                0x0052,0x0052,0xFD06,0x0064,0x0030,0x0048,0x0042,0x004A,0xFF02,0x0054,
+                0x004F,0xFF02,0x0041,0x004E,0x004C,0x0041,0xFF00,0x005E,0xFF02,0x0037,
+                0x0047,0x0048,0x004B,0x0044,0xFF02,0x0047,0x004E,0x004B,0x0043,0x0048,
+                0x004D,0x0046,0xFF02,0x0041,0x004E,0x004C,0x0041,0xFF02,0x004F,0x0051,
+                0x0044,0x0052,0x0052,0xFD06,0x0064,0x0034,0x0047,0x0051,0x004E,0x0056,
+                0xFF02,0x0041,0x004E,0x004C,0x0041,0xFF01,0xFF00,
+            ]
+            try:
+                self._help_msg_ptr = 0x20000000 + self.state.mem.read_int(0x21ECCA40 + 3 * 4)
+                self._help_msg_orig_id = self.state.mem.read_int(self._help_msg_ptr + 0x17E4)
+                buf_ptr = self.state.mem.read_int(self._help_msg_ptr + 0x21D4)
+                pine_buf = 0x20000000 + buf_ptr
+                count = self.state.mem.read_short(pine_buf)
+                for i in range(count):
+                    msg_id = self.state.mem.read_short(pine_buf + 4 + i * 4)
+                    if msg_id == self._help_msg_orig_id:
+                        text_off = self.state.mem.read_short(pine_buf + 6 + i * 4)
+                        self._help_text_addr = pine_buf + (count + text_off + 1) * 2
+                        break
+            except Exception as e:
+                log.error("Help msg setup: %s", e)
             self._options_cursor_poll()
             log.info("Options: auto-injected %d custom rows", len(self._custom_rows))
         except Exception as e:
@@ -658,33 +710,26 @@ class App:
             pine_opt = self._pine
             cursor_row = self.state.mem.read_int(pine_opt + 0x374)
 
-            # Update clip bounds every poll (form may still be animating on first read)
+            # Update clip bounds
             clip_ps2 = self.state.mem.read_int(0x20378148)  # LocalMenuClipForm
             if clip_ps2:
                 pc = 0x20000000 + clip_ps2
                 cy = int(read_f(pc + 0x10))
                 ch = self.state.mem.read_short(pc + 0x06)
                 self.state.mem.write_int(0x21F8004C, cy)
-                self.state.mem.write_int(0x21F80050, cy + ch)
+                self.state.mem.write_int(0x21F80050, cy + ch - 24)
 
-            # Update label Y and button X/Y for all custom rows
+            # Write form-relative label Y (cave adds form Y every frame for smooth gliding)
+            obf_ps2 = self.state.mem.read_int(addr.OPTION_BUTTON_FORM)
+            pine_obf = 0x20000000 + obf_ps2
+            obf_y = read_f(pine_obf + 0x10)
+            self.state.mem.write_int(0x21F80054, int(obf_y))  # form Y for cave
             for row_i, row in enumerate(self._custom_rows):
-                game_row = 16 + row_i
                 label_base = 0x21F80000 + row_i * 0x80
-                obf_ps2 = self.state.mem.read_int(addr.OPTION_BUTTON_FORM)
-                pine_obf = 0x20000000 + obf_ps2
-                obf_x = read_f(pine_obf + 0x0C)
-                obf_y = read_f(pine_obf + 0x10)
-                for b in range(row["buttons"]):
-                    pb = get_btn_addr(row_i, b)
-                    if pb:
-                        bx = obf_x + read_f(pb + 0x1C)
-                        by = obf_y + read_f(pb + 0x20)
-                        if b == 0:
-                            self.state.mem.write_int(label_base + 0x44, int(by) + 2)  # label Y
-                        # Button text position (centered on button)
-                        self.state.mem.write_int(label_base + 0x48 + b * 8, int(bx) + 5)
-                        self.state.mem.write_int(label_base + 0x4C + b * 8, int(by) + 2)
+                pb = get_btn_addr(row_i, 0)
+                if pb:
+                    btn_rel_y = read_f(pb + 0x20)
+                    self.state.mem.write_int(label_base + 0x44, int(btn_rel_y) + 2)  # form-relative Y
 
             if cursor_row >= 16:
                 row_i_c = cursor_row - 16
@@ -727,9 +772,42 @@ class App:
             else:
                 self.state.mem.write_int(0x21F70B60, 0)
                 self.state.mem.write_int(0x21F70B7C, 0)
+
+            # Swap help message description for custom rows
+            if hasattr(self, '_help_text_addr'):
+                if cursor_row >= 16:
+                    ri = cursor_row - 16
+                    desc = self._custom_rows[ri].get("desc", "") if ri < len(self._custom_rows) else ""
+                else:
+                    desc = ""
+                if desc:
+                    if self._last_desc != desc:
+                        from game.dialog import encode
+                        self._encoded_desc = encode(desc)
+                        for i in range(max(len(self._encoded_desc), len(self._orig_help_text))):
+                            self.state.mem.write_short(
+                                self._help_text_addr + i * 2,
+                                self._encoded_desc[i] if i < len(self._encoded_desc) else 0)
+                        # Force re-render: set to -1 now, restore next cycle
+                        self.state.mem.write_int(self._help_msg_ptr + 0x17E4, -1)
+                        self._desc_pending_restore = True
+                        self._last_desc = desc
+                    elif hasattr(self, '_desc_pending_restore') and self._desc_pending_restore:
+                        self.state.mem.write_int(self._help_msg_ptr + 0x17E4, self._help_msg_orig_id)
+                        self._desc_pending_restore = False
+                elif self._last_desc:
+                    if hasattr(self, '_orig_help_text'):
+                        for i, s in enumerate(self._orig_help_text):
+                            self.state.mem.write_short(self._help_text_addr + i * 2, s)
+                        self.state.mem.write_int(self._help_msg_ptr + 0x17E4, -1)
+                        self._desc_pending_restore = True
+                    self._last_desc = ""
+                elif hasattr(self, '_desc_pending_restore') and self._desc_pending_restore:
+                    self.state.mem.write_int(self._help_msg_ptr + 0x17E4, self._help_msg_orig_id)
+                    self._desc_pending_restore = False
             for row_i, row in enumerate(self._custom_rows):
                 game_row = 16 + row_i
-                cfg_addr = 0x21F80060 + row_i * 4
+                cfg_addr = 0x21F80500 + row_i * 4
                 new_val = self.state.mem.read_int(cfg_addr)
                 old_val = self._last_opt_vals.get(row_i)
                 if old_val is not None and new_val != old_val:
@@ -744,9 +822,9 @@ class App:
                         for off in [0x07, 0x08, 0x09]:
                             self.state.mem.write_byte(pa + off, bright)
 
-            self.root.after(50, self._options_cursor_poll)
+            self.root.after(16, self._options_cursor_poll)
         except Exception as e:
-            log.error("Options poll error: %s", e)
+            log.error("Options poll error: %s", e, exc_info=True)
 
     def _inject_custom_rows(self, pine, op, old_count):
         """Inject multiple custom option rows into the options screen."""
@@ -754,34 +832,51 @@ class App:
         pack_f = lambda f: struct.unpack('I', struct.pack('f', f))[0]
 
         self._custom_rows = [
-            {"label": "Run Speed (Town)",              "buttons": 3, "config_ps2": 0x01F80060,
+            {"label": "Run Speed (Town)",              "buttons": 3, "config_ps2": 0x01F80500,
              "btn_tex": [127, 128, 129], "btn_text": [],
              "init": self._init_run_speed,
-             "on_change": self._on_run_speed_change},
-            {"label": "Run Speed (Dungeon)",           "buttons": 3, "config_ps2": 0x01F80064,
+             "on_change": self._on_run_speed_change,
+             "desc": "Mutiplies movement speed in town areas."},
+            {"label": "Run Speed (Dungeon)",           "buttons": 3, "config_ps2": 0x01F80504,
              "btn_tex": [127, 128, 129], "btn_text": [],
              "init": self._init_dng_speed,
-             "on_change": self._on_dng_speed_change},
-            {"label": "Auto Use Repair Powder",        "buttons": 2, "config_ps2": 0x01F80068,
+             "on_change": self._on_dng_speed_change,
+             "desc": "Mutiplies movement speed in dungeons."},
+            {"label": "Auto Use Repair Powder",        "buttons": 2, "config_ps2": 0x01F80508,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if self.manager.auto_repair else 1,
-             "on_change": self._on_auto_repair_change},
-            {"label": "Auto Insert Dungeon Keys",      "buttons": 2, "config_ps2": 0x01F8006C,
+             "on_change": self._on_auto_repair_change,
+             "desc": "Automatically uses Repair Powder when weapons break{n}if the appropriate repair powder is available."},
+            {"label": "Auto Insert Dungeon Keys",      "buttons": 2, "config_ps2": 0x01F8050C,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if self.manager.auto_key else 1,
-             "on_change": self._on_auto_key_change},
-            {"label": "Map Pos.",                      "buttons": 3, "config_ps2": 0x01F80070,
+             "on_change": self._on_auto_key_change,
+             "desc": "Auto-use keys on locked doors when pressing X.{n}No need to manually select keys with Square."},
+            {"label": "Map Pos.",                      "buttons": 3, "config_ps2": 0x01F80510,
              "btn_tex": [130, 131, 132], "btn_text": [],
              "init": self._init_map_pos,
-             "on_change": self._on_map_pos_change},
-            {"label": "Map Pos. (Targeting Enemy)",    "buttons": 3, "config_ps2": 0x01F80074,
+             "on_change": self._on_map_pos_change,
+             "desc": "Offsets large map position during normal gameplay."},
+            {"label": "Map Pos. (Targeting Enemy)",    "buttons": 3, "config_ps2": 0x01F80514,
              "btn_tex": [130, 131, 132], "btn_text": [],
              "init": self._init_map_tgt,
-             "on_change": self._on_map_tgt_change},
-            {"label": "Pickup Radius",                 "buttons": 3, "config_ps2": 0x01F80078,
+             "on_change": self._on_map_tgt_change,
+             "desc": "Offsets large map position while targeting an enemy{n}to move it out of the way."},
+            {"label": "Pickup Radius",                 "buttons": 3, "config_ps2": 0x01F80518,
              "btn_tex": [127, 129, 133], "btn_text": [],
              "init": self._init_pickup,
-             "on_change": self._on_pickup_change},
+             "on_change": self._on_pickup_change,
+             "desc": "Adjust item, experience, etc pickup range."},
+            {"label": "Show Medal HUD",                 "buttons": 2, "config_ps2": 0x01F8051C,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if settings.get("dungeon_hud") is not False else 1,
+             "on_change": self._on_dungeon_hud_change,
+             "desc": "Show dungeon floor medal requirements and completion{n}status on screen."},
+            {"label": "Show Synth Points HUD",        "buttons": 2, "config_ps2": 0x01F80520,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if settings.get("synth_hud") is not False else 1,
+             "on_change": self._on_synth_hud_change,
+             "desc": "Show pending synthesis points on weapon icons."},
         ]
         num_rows = len(self._custom_rows)
         total_new_parts = sum(r["buttons"] for r in self._custom_rows)
@@ -798,7 +893,6 @@ class App:
         for ti in range(2):
             p = cave + ti * 0x48
             ptype = self.state.mem.read_byte(p + 0x06)
-            log.info("Native part %d type byte @+0x06 = 0x%02X", ti, ptype)
             btn_templates.append({
                 "tex_ptr": self.state.mem.read_int(p + 0x14),
                 "tex_idx": self.state.mem.read_byte(p + 0x18),
@@ -819,7 +913,7 @@ class App:
         for row_i, row in enumerate(self._custom_rows):
             game_row = 16 + row_i
             init_val = row["init"]()
-            self.state.mem.write_int(0x21F80060 + row_i * 4, init_val)
+            self.state.mem.write_int(0x21F80500 + row_i * 4, init_val)
 
             for b in range(row["buttons"]):
                 a = cave + part_idx * 0x48
@@ -1032,6 +1126,17 @@ class App:
         except Exception:
             pass
 
+    def _on_dungeon_hud_change(self, val):
+        enabled = val == 0  # 0=ON, 1=OFF
+        settings.set("dungeon_hud", enabled)
+        if not enabled:
+            self.state.mem.write_int(addr.HUD_FLAG, 0)
+
+    def _on_synth_hud_change(self, val):
+        enabled = val == 0
+        settings.set("synth_hud", enabled)
+        self._synth_hud_var.set(enabled)
+
     def _inject_btn_textures(self, cave, btn_templates):
         """Write custom button texture patch and create TexGetInfo entries."""
         import os, json, struct, sys
@@ -1046,23 +1151,11 @@ class App:
             log.warning("No button texture patch found")
             return
         with open(patch_path, 'rb') as f:
-            patch = f.read()
+            self._btn_patch_data = f.read()
         with open(meta_path) as f:
             meta = json.load(f)
 
-        # Write sparse patch: 'F'=full word, 'B'=single byte
-        base = 0x21B73F60
-        i = 0
-        while i < len(patch):
-            tag = chr(patch[i])
-            if tag == 'F':
-                off, val = struct.unpack_from('<II', patch, i + 1)
-                self.state.mem.write_int(base + off, val)
-                i += 9
-            elif tag == 'B':
-                off, val = struct.unpack_from('<IB', patch, i + 1)
-                self.state.mem.write_byte(base + off, val)
-                i += 6
+        self._write_btn_patch()
 
         # Create TexGetInfo entries
         mp = self.state.mem.read_int(0x20377940)
@@ -1082,7 +1175,60 @@ class App:
 
         self._btn_uvs = meta["buttons"]
         log.info("Injected %d custom button textures (%d pixels)",
-                 len(meta["buttons"]), len(patch) // 5)
+                 len(meta["buttons"]), len(self._btn_patch_data) // 5)
+
+    def _write_btn_patch(self):
+        """Write the sparse texture patch to EE RAM."""
+        import struct
+        patch = self._btn_patch_data
+        # Read pixel data address from native button's mgCTexture
+        obf = self.state.mem.read_int(addr.OPTION_BUTTON_FORM)
+        if obf == 0:
+            base = 0x21B73F60  # fallback
+        else:
+            parts_ptr = self.state.mem.read_int(0x20000000 + obf + 0x6C)
+            tex_ptr = self.state.mem.read_int(0x20000000 + parts_ptr + 0x14)
+            pixel_addr = self.state.mem.read_int(0x20000000 + tex_ptr + 0x50)
+            base = 0x20000000 + pixel_addr
+        log.info("Texture atlas base: 0x%08X", base)
+        i = 0
+        while i < len(patch):
+            tag = chr(patch[i])
+            if tag == 'F':
+                off, val = struct.unpack_from('<II', patch, i + 1)
+                self.state.mem.write_int(base + off, val)
+                i += 9
+            elif tag == 'B':
+                off, val = struct.unpack_from('<IB', patch, i + 1)
+                self.state.mem.write_byte(base + off, val)
+                i += 6
+
+    def _early_texture_patch(self):
+        """Patch button atlas early (before menu opens) so GS upload includes our data."""
+        try:
+            self._load_btn_patch()
+            self._write_btn_patch()
+            log.info("Early texture patch applied")
+        except Exception as e:
+            log.error("Early texture patch failed: %s", e)
+
+    def _load_btn_patch(self):
+        """Load patch data from disk if not already loaded."""
+        if hasattr(self, '_btn_patch_data'):
+            return
+        import os, sys
+        if getattr(sys, 'frozen', False):
+            base = sys._MEIPASS
+        else:
+            base = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..')
+        tex_dir = os.path.join(base, 'Textures', 'OptionsMenu')
+        with open(os.path.join(tex_dir, 'btn_patch.bin'), 'rb') as f:
+            self._btn_patch_data = f.read()
+
+    def _reinject_btn_textures(self):
+        """Re-apply texture patch (atlas may have been reloaded)."""
+        if hasattr(self, '_btn_patch_data'):
+            self._write_btn_patch()
 
     def _on_close(self):
         self.manager.stop_nowait()

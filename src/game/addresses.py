@@ -45,6 +45,12 @@ BUGGY_HP = 0x203787DC               # Ridepod HP (float)
 SAVE_DATA_BASE = 0x21E01810
 ACTIVE_SAVE_DATA_PTR = 0x20376FE4   # Pointer to active save data
 
+# --- Debug: Circle probability logging ---
+DEBUG_CIRCLE_PARAM = 0x21F70100     # Last param (0=angel, 1=devil)
+DEBUG_CIRCLE_COUNT = 0x21F70104     # Total calls
+DEBUG_CIRCLE_ANGEL = 0x21F70108     # Angel count
+DEBUG_CIRCLE_DEVIL = 0x21F7010C     # Devil count
+
 # Save data structure offsets (from SaveData base):
 #   +0x1a08  = chapter / game progression state
 #   +0x1a10  = time of day (float)
@@ -272,6 +278,22 @@ REPAIR_CONSUMED = 0x21F7004C        # Set by PNACH cave: 1=melee powder used, 2=
 AUTO_KEY_FLAG = 0x21F70050          # 1=auto-key enabled (set by Python)
 KEY_CONSUMED = 0x21F70054           # Set by PNACH cave: box_index+1 when key used (0=none)
 
+# --- Weapon / ABS data ---
+# BattleParamater (CBattleCharaInfo) at 0x01E9B130
+BATTLE_PARAMATER = 0x21E9B130
+# +0x06 = mode (short): 0=normal, 1=ridepod, 2=monster
+# +0x30 = pointer to weapon data base (CGameDataUsed array)
+# CGameDataUsed per slot (0x6C bytes):
+#   +0x02 = item ID (short)
+#   +0x18 = ABS COMMON_GAGE: [max(float), current(float)]
+#   +0x20 = level (short)
+# Slot 0 = melee, slot 1 = ranged
+WEAPON_SLOT_SIZE = 0x6C
+
+# Synthesis points HUD (Python writes strings, PNACH cave renders)
+SYNTH_STR_MELEE = 0x21F70058       # 16-byte ASCII string for melee synth points
+SYNTH_STR_RANGED = 0x21F70068      # 16-byte ASCII string for ranged synth points
+
 # Inventory: UserDataManager = SaveData + 0x1D2A0 = 0x21E1EAB0
 # 150 slots of 0x6C bytes. Per slot: +0x00=type(short), +0x02=itemID(short), +0x10=count(short)
 USER_DATA_MANAGER = 0x21E1EAB0
@@ -288,7 +310,3 @@ HUD_LINE_LEN = 64                   # Max bytes per line (including null)
 DNG_INFO_FLOOR_INFO = 0x203773C0    # Ptr to current floor save data (medal flags etc)
 DNG_INFO_ROOM_INFO = 0x203773C4     # Ptr to current floor static data (requirements)
 
-# --- Dungeon scene ---
-DNG_MAIN_SCENE = 0x2037729C         # Pointer to DngMainScene (CScene)
-# Event ClsMes: *(DngMainScene + 0x2240)  (GetSceneMessage(scene,0) + 0x34)
-_SCENE_MSG_CLSMES_OFFSET = 0x2240   # scene + 0x220C + 0x34

@@ -325,7 +325,7 @@ patch=1,EE,21F70504,extended,03E00008 // jr ra
 patch=1,EE,21F70508,extended,27BD0030 // addiu sp, 48 (delay)
 
 // ======== 06-hud-overlay ========
-// HUD overlay: draws text lines in top-left during dungeon gameplay
+// HUD overlay: draws text lines below hotbar during dungeon gameplay
 // HUD_FLAG       (0x01F70040): 1=draw overlay
 // HUD_LINE_COUNT (0x01F70044): number of lines (max 6)
 // HUD_TEXT_BASE  (0x01F70A00): 64 bytes per line, 6 lines max
@@ -340,7 +340,7 @@ patch=1,EE,21F70508,extended,27BD0030 // addiu sp, 48 (delay)
 // Original: 0C073C24  New: 0C7DC180
 patch=1,EE,201CEB70,extended,0C7DC180 // jal cave 0x01F70600
 // === Code cave at 0x01F70600 ===
-// Prologue (48-byte stack frame for safety)
+// Prologue
 patch=1,EE,21F70600,extended,27BDFFD0 // addiu sp, sp, -48
 patch=1,EE,21F70604,extended,AFBF0000 // sw ra, 0(sp)
 patch=1,EE,21F70608,extended,AFB00004 // sw s0, 4(sp)
@@ -350,87 +350,98 @@ patch=1,EE,21F70614,extended,AFB30010 // sw s3, 16(sp)
 // Call original DngMainDraw
 patch=1,EE,21F70618,extended,0C073C24 // jal DngMainDraw
 patch=1,EE,21F7061C,extended,00000000 // nop
-// Check HUD_FLAG — if 0, skip to epilogue
+// Check HUD_FLAG — if 0, skip to epilogue @71C
 patch=1,EE,21F70620,extended,3C0201F7 // lui v0, 0x01F7
 patch=1,EE,21F70624,extended,8C420040 // lw v0, 0x0040(v0)
-patch=1,EE,21F70628,extended,10400038 // beq v0, zero, epilogue (0x70C)
+// beq v0,zero,724; off=(724-62C)/4=0x3E
+patch=1,EE,21F70628,extended,1040003E // beq v0, zero, 724
 patch=1,EE,21F7062C,extended,00000000 // nop
+// Check anim float >= 1.0 — if not, skip to epilogue @71C
+patch=1,EE,21F70630,extended,8F828DB0 // lw v0, -0x7250(gp)  ; BattleAreaScene
+patch=1,EE,21F70634,extended,8C42004C // lw v0, 0x4C(v0)     ; anim float as int
+patch=1,EE,21F70638,extended,3C013F80 // lui at, 0x3F80       ; 1.0f
+patch=1,EE,21F7063C,extended,0041082A // slt at, v0, at       ; at=1 if < 1.0
+// bne at,zero,724; off=(724-644)/4=0x38
+patch=1,EE,21F70640,extended,14200038 // bne at, zero, 724
+patch=1,EE,21F70644,extended,00000000 // nop
 // s1 = line count, s0 = 0 (counter), s2 = text base, s3 = y
-patch=1,EE,21F70630,extended,3C0201F7 // lui v0, 0x01F7
-patch=1,EE,21F70634,extended,8C510044 // lw s1, 0x0044(v0)
-patch=1,EE,21F70638,extended,1A20002A // blez s1, restore (0x6E4)
-patch=1,EE,21F7063C,extended,00008025 // move s0, zero (delay)
-patch=1,EE,21F70640,extended,3C1201F7 // lui s2, 0x01F7
-patch=1,EE,21F70644,extended,36520A00 // ori s2, 0x0A00  s2 = text base
-patch=1,EE,21F70648,extended,3413000A // li s3, 10       s3 = y start
+patch=1,EE,21F70648,extended,3C0201F7 // lui v0, 0x01F7
+patch=1,EE,21F7064C,extended,8C510044 // lw s1, 0x0044(v0)
+// blez s1, restore @6FC; off=(6FC-654)/4=0x2A
+patch=1,EE,21F70650,extended,1A20002A // blez s1, 6FC
+patch=1,EE,21F70654,extended,00008025 // move s0, zero (delay)
+patch=1,EE,21F70658,extended,3C1201F7 // lui s2, 0x01F7
+patch=1,EE,21F7065C,extended,36520A00 // ori s2, 0x0A00  s2 = text base
+patch=1,EE,21F70660,extended,34130046 // li s3, 70       s3 = y start (below hotbar)
 // SetDrawSize(12, 16)
-patch=1,EE,21F7064C,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F70650,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F70654,extended,3405000C // li a1, 12
-patch=1,EE,21F70658,extended,0C0B5128 // jal SetDrawSize
-patch=1,EE,21F7065C,extended,34060010 // li a2, 16
+patch=1,EE,21F70664,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70668,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F7066C,extended,3405000C // li a1, 12
+patch=1,EE,21F70670,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F70674,extended,34060010 // li a2, 16
 // SetClearance(11, 14)
-patch=1,EE,21F70660,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F70664,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F70668,extended,3405000B // li a1, 11
-patch=1,EE,21F7066C,extended,0C0B512C // jal SetClearance
-patch=1,EE,21F70670,extended,3406000E // li a2, 14
-// === Loop start (0x674) ===
+patch=1,EE,21F70678,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F7067C,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70680,extended,3405000B // li a1, 11
+patch=1,EE,21F70684,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70688,extended,3406000E // li a2, 14
+// === Loop start (0x68C) ===
 // SetColor black shadow
-patch=1,EE,21F70674,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F70678,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F7067C,extended,3C058000 // lui a1, 0x8000
-patch=1,EE,21F70680,extended,0C0B5148 // jal SetColor
-patch=1,EE,21F70684,extended,00000000 // nop
+patch=1,EE,21F7068C,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70690,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70694,extended,3C058000 // lui a1, 0x8000
+patch=1,EE,21F70698,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F7069C,extended,00000000 // nop
 // DrawDirect shadow (x=11, y=s3+1)
-patch=1,EE,21F70688,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F7068C,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F70690,extended,02402825 // move a1, s2     str ptr
-patch=1,EE,21F70694,extended,3406000B // li a2, 11
-patch=1,EE,21F70698,extended,0C0B5688 // jal DrawDirect
-patch=1,EE,21F7069C,extended,26670001 // addiu a3, s3, 1 (delay: y+1)
-// SetColor light gray
 patch=1,EE,21F706A0,extended,3C04003E // lui a0, 0x003E
 patch=1,EE,21F706A4,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F706A8,extended,3C0580E0 // lui a1, 0x80E0
-patch=1,EE,21F706AC,extended,0C0B5148 // jal SetColor
-patch=1,EE,21F706B0,extended,34A5E0E0 // ori a1, 0xE0E0
+patch=1,EE,21F706A8,extended,02402825 // move a1, s2     str ptr
+patch=1,EE,21F706AC,extended,3406000B // li a2, 11
+patch=1,EE,21F706B0,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F706B4,extended,26670001 // addiu a3, s3, 1 (delay: y+1)
+// SetColor light gray
+patch=1,EE,21F706B8,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F706BC,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F706C0,extended,3C0580E0 // lui a1, 0x80E0
+patch=1,EE,21F706C4,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F706C8,extended,34A5E0E0 // ori a1, 0xE0E0
 // DrawDirect main text (x=10, y=s3)
-patch=1,EE,21F706B4,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F706B8,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F706BC,extended,02402825 // move a1, s2     str ptr
-patch=1,EE,21F706C0,extended,3406000A // li a2, 10
-patch=1,EE,21F706C4,extended,0C0B5688 // jal DrawDirect
-patch=1,EE,21F706C8,extended,02603825 // move a3, s3     y (delay)
+patch=1,EE,21F706CC,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F706D0,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F706D4,extended,02402825 // move a1, s2     str ptr
+patch=1,EE,21F706D8,extended,3406000A // li a2, 10
+patch=1,EE,21F706DC,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F706E0,extended,02603825 // move a3, s3     y (delay)
 // s0++, s2 += 64, s3 += 16
-patch=1,EE,21F706CC,extended,26100001 // addiu s0, s0, 1
-patch=1,EE,21F706D0,extended,26520040 // addiu s2, s2, 64
-patch=1,EE,21F706D4,extended,26730010 // addiu s3, s3, 16
-// if s0 < s1, loop
-patch=1,EE,21F706D8,extended,0211082A // slt at, s0, s1
-patch=1,EE,21F706DC,extended,1420FFE5 // bne at, zero, loop_start (0x674)
-patch=1,EE,21F706E0,extended,00000000 // nop
-// === Restore font (0x6E4) ===
+patch=1,EE,21F706E4,extended,26100001 // addiu s0, s0, 1
+patch=1,EE,21F706E8,extended,26520040 // addiu s2, s2, 64
+patch=1,EE,21F706EC,extended,26730010 // addiu s3, s3, 16
+// if s0 < s1, loop back to 68C
+patch=1,EE,21F706F0,extended,0211082A // slt at, s0, s1
+// bne at,zero,68C; off=(68C-6F8)/4 = -0x1B (signed)
+patch=1,EE,21F706F4,extended,1420FFE5 // bne at, zero, 68C
+patch=1,EE,21F706F8,extended,00000000 // nop
+// === Restore font (0x6FC) ===
 // SetDrawSize(16, 20)
-patch=1,EE,21F706E4,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F706E8,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F706EC,extended,34050010 // li a1, 16
-patch=1,EE,21F706F0,extended,0C0B5128 // jal SetDrawSize
-patch=1,EE,21F706F4,extended,34060014 // li a2, 20
+patch=1,EE,21F706FC,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70700,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70704,extended,34050010 // li a1, 16
+patch=1,EE,21F70708,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F7070C,extended,34060014 // li a2, 20
 // SetClearance(15, 18)
-patch=1,EE,21F706F8,extended,3C04003E // lui a0, 0x003E
-patch=1,EE,21F706FC,extended,24848090 // addiu a0, -0x7F70
-patch=1,EE,21F70700,extended,3405000F // li a1, 15
-patch=1,EE,21F70704,extended,0C0B512C // jal SetClearance
-patch=1,EE,21F70708,extended,34060012 // li a2, 18
-// === Epilogue (0x70C) ===
-patch=1,EE,21F7070C,extended,8FB30010 // lw s3, 16(sp)
-patch=1,EE,21F70710,extended,8FB2000C // lw s2, 12(sp)
-patch=1,EE,21F70714,extended,8FB10008 // lw s1, 8(sp)
-patch=1,EE,21F70718,extended,8FB00004 // lw s0, 4(sp)
-patch=1,EE,21F7071C,extended,8FBF0000 // lw ra, 0(sp)
-patch=1,EE,21F70720,extended,03E00008 // jr ra
-patch=1,EE,21F70724,extended,27BD0030 // addiu sp, sp, 48 (delay)
+patch=1,EE,21F70710,extended,3C04003E // lui a0, 0x003E
+patch=1,EE,21F70714,extended,24848090 // addiu a0, -0x7F70
+patch=1,EE,21F70718,extended,3405000F // li a1, 15
+patch=1,EE,21F7071C,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70720,extended,34060012 // li a2, 18
+// === Epilogue (0x724) ===
+patch=1,EE,21F70724,extended,8FB30010 // lw s3, 16(sp)
+patch=1,EE,21F70728,extended,8FB2000C // lw s2, 12(sp)
+patch=1,EE,21F7072C,extended,8FB10008 // lw s1, 8(sp)
+patch=1,EE,21F70730,extended,8FB00004 // lw s0, 4(sp)
+patch=1,EE,21F70734,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F70738,extended,03E00008 // jr ra
+patch=1,EE,21F7073C,extended,27BD0030 // addiu sp, sp, 48 (delay)
 
 // ======== 07-dungeon-speed ========
 // Dungeon speed multiplier: scales velocity before CollisionCheck
@@ -441,7 +452,7 @@ patch=1,EE,21F70724,extended,27BD0030 // addiu sp, sp, 48 (delay)
 patch=1,EE,20171438,extended,0C7DC1E0 // jal cave 0x01F70780
 // === Code cave at 0x01F70780 ===
 // Load multiplier via lui+mtc1 (Python patches the lui immediate)
-patch=1,EE,21F70780,extended,3C023F80 // lui v0, 0x3F80  (1.0 default, patched by Python)
+patch=0,EE,21F70780,extended,3C023F80 // lui v0, 0x3F80  (1.0 default, patched by Python) - patch=0 so Python can override
 patch=1,EE,21F70784,extended,44820000 // mtc1 v0, f0
 // Scale vx
 patch=1,EE,21F70788,extended,C4C10000 // lwc1 f1, 0(a2)
@@ -562,126 +573,92 @@ patch=1,EE,21F70BF4,extended,03E00008
 patch=1,EE,21F70BF8,extended,27BD0020
 
 // ======== 11-option-labels ========
-// Options screen draw hook — renders N custom labels + button text via CFont
-// Row count at 0x01F80058. Per row at 0x01F80000 + i*0x80:
-//   +0x00: label string (36 bytes)
-//   +0x24: btn0 text (8 bytes), +0x2C: btn1 text (8 bytes)
-//   +0x40: label X, +0x44: label Y
-//   +0x48: btn0 X, +0x4C: btn0 Y, +0x50: btn1 X, +0x54: btn1 Y
-// Clip: 0x01F8004C=top, 0x01F80050=bottom
-// Labels: gray text, fuchi=5, size 16/20
-// Button text: white text, fuchi=7, size 11/14
+// Label cave — form Y from 0x01F80054, smooth scroll, all offsets verified
 patch=1,EE,2035099C,extended,01F70E00
 patch=1,EE,21F80040,extended,00000056
-// Prologue
 patch=1,EE,21F70E00,extended,27BDFFC0
 patch=1,EE,21F70E04,extended,AFBF0000
 patch=1,EE,21F70E08,extended,AFB00004
 patch=1,EE,21F70E0C,extended,AFB10008
 patch=1,EE,21F70E10,extended,AFB2000C
 patch=1,EE,21F70E14,extended,AFB30010
-// FormDraw
 patch=1,EE,21F70E18,extended,8F849450
 patch=1,EE,21F70E1C,extended,0C08AD0C
 patch=1,EE,21F70E20,extended,00000000
-// Setup
 patch=1,EE,21F70E24,extended,3C1001F8
 patch=1,EE,21F70E28,extended,8E110058
-patch=1,EE,21F70E2C,extended,1220004F // beq s1,zero,ep (F6C)
+patch=1,EE,21F70E2C,extended,12200040
 patch=1,EE,21F70E30,extended,00000000
 patch=1,EE,21F70E34,extended,8E12004C
 patch=1,EE,21F70E38,extended,8E130050
-// Loop (E3C)
-patch=1,EE,21F70E3C,extended,92020000
-patch=1,EE,21F70E40,extended,10400046 // beq v0,zero,skip (F5C)
-patch=1,EE,21F70E44,extended,00000000
-patch=1,EE,21F70E48,extended,8E070044
-patch=1,EE,21F70E4C,extended,00F2182A
-patch=1,EE,21F70E50,extended,14600042 // bne v1,zero,skip
-patch=1,EE,21F70E54,extended,00F3182A
-patch=1,EE,21F70E58,extended,10600040 // beq v1,zero,skip
-patch=1,EE,21F70E5C,extended,00000000
-patch=1,EE,21F70E60,extended,AFA70018
-// Label font setup: fuchi=5, size=16/20, color=gray
-patch=1,EE,21F70E64,extended,3C04003E
-patch=1,EE,21F70E68,extended,24848090
-patch=1,EE,21F70E6C,extended,0C0B515C
-patch=1,EE,21F70E70,extended,34050005
+patch=1,EE,21F70E3C,extended,8E020054
+patch=1,EE,21F70E40,extended,AFA2001C
+patch=1,EE,21F70E44,extended,92020000
+patch=1,EE,21F70E48,extended,10400035
+patch=1,EE,21F70E4C,extended,00000000
+patch=1,EE,21F70E50,extended,8E070044
+patch=1,EE,21F70E54,extended,8FA2001C
+patch=1,EE,21F70E58,extended,00E23821
+patch=1,EE,21F70E5C,extended,00F2182A
+patch=1,EE,21F70E60,extended,1460002F
+patch=1,EE,21F70E64,extended,00F3182A
+patch=1,EE,21F70E68,extended,1060002D
+patch=1,EE,21F70E6C,extended,00000000
+patch=1,EE,21F70E70,extended,AFA70018
 patch=1,EE,21F70E74,extended,3C04003E
 patch=1,EE,21F70E78,extended,24848090
-patch=1,EE,21F70E7C,extended,34050010
-patch=1,EE,21F70E80,extended,0C0B5128
-patch=1,EE,21F70E84,extended,34060014
-patch=1,EE,21F70E88,extended,3C04003E
-patch=1,EE,21F70E8C,extended,24848090
-patch=1,EE,21F70E90,extended,34050010
-patch=1,EE,21F70E94,extended,0C0B512C
-patch=1,EE,21F70E98,extended,34060014
-patch=1,EE,21F70E9C,extended,3C04003E
-patch=1,EE,21F70EA0,extended,24848090
-patch=1,EE,21F70EA4,extended,3C058068
-patch=1,EE,21F70EA8,extended,0C0B5148
-patch=1,EE,21F70EAC,extended,34A56A6B
-// DrawDirect label
-patch=1,EE,21F70EB0,extended,3C04003E
-patch=1,EE,21F70EB4,extended,24848090
-patch=1,EE,21F70EB8,extended,26050000
-patch=1,EE,21F70EBC,extended,8E060040
-patch=1,EE,21F70EC0,extended,0C0B5688
-patch=1,EE,21F70EC4,extended,8FA70018
-// Button font setup: fuchi=7, size=11/14, color=white
-patch=1,EE,21F70EC8,extended,3C04003E
-patch=1,EE,21F70ECC,extended,24848090
-patch=1,EE,21F70ED0,extended,0C0B515C // SetFuchi
-patch=1,EE,21F70ED4,extended,34050007 // fuchi=7
-patch=1,EE,21F70ED8,extended,3C04003E
-patch=1,EE,21F70EDC,extended,24848090
-patch=1,EE,21F70EE0,extended,3405000B // size=11
-patch=1,EE,21F70EE4,extended,0C0B5128 // SetDrawSize
-patch=1,EE,21F70EE8,extended,3406000E // 14
-patch=1,EE,21F70EEC,extended,3C04003E
-patch=1,EE,21F70EF0,extended,24848090
-patch=1,EE,21F70EF4,extended,3405000B
-patch=1,EE,21F70EF8,extended,0C0B512C // SetClearance
-patch=1,EE,21F70EFC,extended,3406000E
-patch=1,EE,21F70F00,extended,3C04003E
-patch=1,EE,21F70F04,extended,24848090
-patch=1,EE,21F70F08,extended,3C0580FF // color=0x80FFFFFF (white)
-patch=1,EE,21F70F0C,extended,0C0B5148 // SetColor
-patch=1,EE,21F70F10,extended,34A5FFFF
-// btn0 text
-patch=1,EE,21F70F14,extended,92020024
-patch=1,EE,21F70F18,extended,10400007 // beq v0,zero,btn1 (F38)
-patch=1,EE,21F70F1C,extended,00000000
-patch=1,EE,21F70F20,extended,3C04003E
-patch=1,EE,21F70F24,extended,24848090
-patch=1,EE,21F70F28,extended,26050024
-patch=1,EE,21F70F2C,extended,8E060048
-patch=1,EE,21F70F30,extended,0C0B5688
-patch=1,EE,21F70F34,extended,8E07004C
-// btn1 text (F38)
-patch=1,EE,21F70F38,extended,9202002C
-patch=1,EE,21F70F3C,extended,10400007 // beq v0,zero,skip (F5C)
-patch=1,EE,21F70F40,extended,00000000
-patch=1,EE,21F70F44,extended,3C04003E
-patch=1,EE,21F70F48,extended,24848090
-patch=1,EE,21F70F4C,extended,2605002C
-patch=1,EE,21F70F50,extended,8E060050
-patch=1,EE,21F70F54,extended,0C0B5688
-patch=1,EE,21F70F58,extended,8E070054
-// Skip (F5C)
-patch=1,EE,21F70F5C,extended,26100080
-patch=1,EE,21F70F60,extended,2631FFFF
-patch=1,EE,21F70F64,extended,1620FFB5 // bne s1,zero,loop (E3C)
-patch=1,EE,21F70F68,extended,00000000
-// Epilogue (F6C)
-patch=1,EE,21F70F6C,extended,8FB30010
-patch=1,EE,21F70F70,extended,8FB2000C
-patch=1,EE,21F70F74,extended,8FB10008
-patch=1,EE,21F70F78,extended,8FB00004
-patch=1,EE,21F70F7C,extended,8FBF0000
-patch=1,EE,21F70F80,extended,03E00008
-patch=1,EE,21F70F84,extended,27BD0040
+patch=1,EE,21F70E7C,extended,0C0B515C
+patch=1,EE,21F70E80,extended,34050005
+patch=1,EE,21F70E84,extended,3C04003E
+patch=1,EE,21F70E88,extended,24848090
+patch=1,EE,21F70E8C,extended,34050010
+patch=1,EE,21F70E90,extended,0C0B5128
+patch=1,EE,21F70E94,extended,34060014
+patch=1,EE,21F70E98,extended,3C04003E
+patch=1,EE,21F70E9C,extended,24848090
+patch=1,EE,21F70EA0,extended,34050010
+patch=1,EE,21F70EA4,extended,0C0B512C
+patch=1,EE,21F70EA8,extended,34060014
+patch=1,EE,21F70EAC,extended,3C04003E
+patch=1,EE,21F70EB0,extended,24848090
+patch=1,EE,21F70EB4,extended,3C058068
+patch=1,EE,21F70EB8,extended,0C0B5148
+patch=1,EE,21F70EBC,extended,34A56A6B
+patch=1,EE,21F70EC0,extended,3C04003E
+patch=1,EE,21F70EC4,extended,24848090
+patch=1,EE,21F70EC8,extended,26050000
+patch=1,EE,21F70ECC,extended,8E060040
+patch=1,EE,21F70ED0,extended,0C0B5688
+patch=1,EE,21F70ED4,extended,8FA70018
+patch=1,EE,21F70ED8,extended,92020024
+patch=1,EE,21F70EDC,extended,10400007
+patch=1,EE,21F70EE0,extended,00000000
+patch=1,EE,21F70EE4,extended,3C04003E
+patch=1,EE,21F70EE8,extended,24848090
+patch=1,EE,21F70EEC,extended,26050024
+patch=1,EE,21F70EF0,extended,8E060048
+patch=1,EE,21F70EF4,extended,0C0B5688
+patch=1,EE,21F70EF8,extended,8E07004C
+patch=1,EE,21F70EFC,extended,9202002C
+patch=1,EE,21F70F00,extended,10400007
+patch=1,EE,21F70F04,extended,00000000
+patch=1,EE,21F70F08,extended,3C04003E
+patch=1,EE,21F70F0C,extended,24848090
+patch=1,EE,21F70F10,extended,2605002C
+patch=1,EE,21F70F14,extended,8E060050
+patch=1,EE,21F70F18,extended,0C0B5688
+patch=1,EE,21F70F1C,extended,8E070054
+patch=1,EE,21F70F20,extended,26100080
+patch=1,EE,21F70F24,extended,2631FFFF
+patch=1,EE,21F70F28,extended,1620FFC6
+patch=1,EE,21F70F2C,extended,00000000
+patch=1,EE,21F70F30,extended,8FB30010
+patch=1,EE,21F70F34,extended,8FB2000C
+patch=1,EE,21F70F38,extended,8FB10008
+patch=1,EE,21F70F3C,extended,8FB00004
+patch=1,EE,21F70F40,extended,8FBF0000
+patch=1,EE,21F70F44,extended,03E00008
+patch=1,EE,21F70F48,extended,27BD0040
 
 // ======== 12-auto-key ========
 // Auto Key — automatically uses dungeon key on locked door when pressing X
@@ -728,12 +705,15 @@ patch=1,EE,21F70C3C,extended,AFA4001C // sw a0, 0x1C(sp)  [entry addr]
 // +40: read key item ID
 patch=1,EE,21F70C40,extended,9485006C // lhu a1, 0x6C(a0)
 patch=1,EE,21F70C44,extended,AFA50018 // sw a1, 0x18(sp)
-// +48: if key == 0xFFFF or 0 → restore_normal (+B0)
-patch=1,EE,21F70C48,extended,3C010001 // lui at, 1
-patch=1,EE,21F70C4C,extended,2421FFFF // addiu at, at, -1  [at=0xFFFF]
-patch=1,EE,21F70C50,extended,10A10017 // beq a1, at, +B0
+// +48: check if item is a dungeon key (0x151..0x15F)
+// a1 - 0x151; if unsigned result > 0xE, not a key → restore_normal
+patch=1,EE,21F70C48,extended,24A1FEAF // addiu at, a1, -0x151
+patch=1,EE,21F70C4C,extended,2C21000F // sltiu at, at, 15     ; at=1 if in range
+// beq at,zero → restore_normal(+B0). off=(B0-54)/4=0x17
+patch=1,EE,21F70C50,extended,10200017 // beq at, zero, +B0
 patch=1,EE,21F70C54,extended,00000000 // nop
-patch=1,EE,21F70C58,extended,10A00015 // beq a1, zero, +B0
+// (removed old beq a1,zero check — range check covers it)
+patch=1,EE,21F70C58,extended,00000000 // nop
 patch=1,EE,21F70C5C,extended,00000000 // nop
 // +60: GetNumSameItem(DngUserData, keyItemId)
 patch=1,EE,21F70C60,extended,8F848DA0 // lw a0, -0x7260(gp)
@@ -767,3 +747,90 @@ patch=1,EE,21F70CB4,extended,27BD0030 // addiu sp, sp, 0x30
 patch=1,EE,21F70CB8,extended,2403044C // li v1, 0x44c
 patch=1,EE,21F70CBC,extended,08074E04 // j 0x001D3810
 patch=1,EE,21F70CC0,extended,A6630000 // sh v1, 0(s3)  [delay]
+
+// ======== 13-synth-hud ========
+// Synthesis points HUD — draws pending synth points on weapon icons
+// Python writes ASCII strings to 0x01F70058 (melee) and 0x01F70068 (ranged)
+//
+// Chains: this cave -> HUD overlay cave (0x01F70600) -> DngMainDraw
+// Checks HUD_FLAG AND anim float >= 1.0 before drawing
+// Cave at 0x01F70D00
+// Override HUD overlay hook
+patch=1,EE,201CEB70,extended,0C7DC340 // jal 0x01F70D00
+// D00 prologue
+patch=1,EE,21F70D00,extended,27BDFFD0 // addiu sp, -48
+patch=1,EE,21F70D04,extended,AFBF0000 // sw ra, 0(sp)
+patch=1,EE,21F70D08,extended,AFB00004 // sw s0, 4(sp)
+// D0C call HUD overlay
+patch=1,EE,21F70D0C,extended,0C7DC180 // jal 0x01F70600
+patch=1,EE,21F70D10,extended,00000000 // nop
+// D14 check HUD_FLAG
+patch=1,EE,21F70D14,extended,3C0201F7 // lui v0, 0x01F7
+patch=1,EE,21F70D18,extended,8C420040 // lw v0, 0x0040(v0)
+// D1C beq v0,zero -> epilogue @DE4; off=(DE4-D20)/4=0x31
+patch=1,EE,21F70D1C,extended,10400031 // beq v0, zero, DE4
+patch=1,EE,21F70D20,extended,00000000 // nop
+// D24 check anim float >= 1.0
+patch=1,EE,21F70D24,extended,8F828DB0 // lw v0, -0x7250(gp)
+patch=1,EE,21F70D28,extended,8C42004C // lw v0, 0x4C(v0)
+patch=1,EE,21F70D2C,extended,3C013F80 // lui at, 0x3F80
+patch=1,EE,21F70D30,extended,0041082A // slt at, v0, at
+// D34 bne at,zero -> epilogue @DE4; off=(DE4-D38)/4=0x2B
+patch=1,EE,21F70D34,extended,1420002B // bne at, zero, DE4
+patch=1,EE,21F70D38,extended,00000000 // nop
+// D3C s0=CFont
+patch=1,EE,21F70D3C,extended,3C10003E // lui s0, 0x003E
+patch=1,EE,21F70D40,extended,26108090 // addiu s0, -0x7F70
+// D44 SetDrawSize(10,10)
+patch=1,EE,21F70D44,extended,02002025 // move a0, s0
+patch=1,EE,21F70D48,extended,3405000A // li a1, 10
+patch=1,EE,21F70D4C,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F70D50,extended,3406000A // li a2, 10
+// D54 SetClearance(9,10)
+patch=1,EE,21F70D54,extended,02002025 // move a0, s0
+patch=1,EE,21F70D58,extended,34050009 // li a1, 9
+patch=1,EE,21F70D5C,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F70D60,extended,3406000A // li a2, 10
+// D64 SetColor black
+patch=1,EE,21F70D64,extended,02002025 // move a0, s0
+patch=1,EE,21F70D68,extended,3C058000 // lui a1, 0x8000
+patch=1,EE,21F70D6C,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F70D70,extended,00000000 // nop
+// D74 Shadow melee (303,40)
+patch=1,EE,21F70D74,extended,02002025 // move a0, s0
+patch=1,EE,21F70D78,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F70D7C,extended,34A50058 // ori a1, 0x0058
+patch=1,EE,21F70D80,extended,3406012F // li a2, 303
+patch=1,EE,21F70D84,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70D88,extended,34070028 // li a3, 40
+// D8C Shadow ranged (471,40)
+patch=1,EE,21F70D8C,extended,02002025 // move a0, s0
+patch=1,EE,21F70D90,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F70D94,extended,34A50068 // ori a1, 0x0068
+patch=1,EE,21F70D98,extended,340601D7 // li a2, 471
+patch=1,EE,21F70D9C,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70DA0,extended,34070028 // li a3, 40
+// DA4 SetColor yellow
+patch=1,EE,21F70DA4,extended,02002025 // move a0, s0
+patch=1,EE,21F70DA8,extended,3C058000 // lui a1, 0x8000
+patch=1,EE,21F70DAC,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F70DB0,extended,34A5FFFF // ori a1, 0xFFFF
+// DB4 Main melee (302,39)
+patch=1,EE,21F70DB4,extended,02002025 // move a0, s0
+patch=1,EE,21F70DB8,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F70DBC,extended,34A50058 // ori a1, 0x0058
+patch=1,EE,21F70DC0,extended,3406012E // li a2, 302
+patch=1,EE,21F70DC4,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70DC8,extended,34070027 // li a3, 39
+// DCC Main ranged (470,39)
+patch=1,EE,21F70DCC,extended,02002025 // move a0, s0
+patch=1,EE,21F70DD0,extended,3C0501F7 // lui a1, 0x01F7
+patch=1,EE,21F70DD4,extended,34A50068 // ori a1, 0x0068
+patch=1,EE,21F70DD8,extended,340601D6 // li a2, 470
+patch=1,EE,21F70DDC,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F70DE0,extended,34070027 // li a3, 39
+// DE4 epilogue
+patch=1,EE,21F70DE4,extended,8FB00004 // lw s0, 4(sp)
+patch=1,EE,21F70DE8,extended,8FBF0000 // lw ra, 0(sp)
+patch=1,EE,21F70DEC,extended,03E00008 // jr ra
+patch=1,EE,21F70DF0,extended,27BD0030 // addiu sp, 48

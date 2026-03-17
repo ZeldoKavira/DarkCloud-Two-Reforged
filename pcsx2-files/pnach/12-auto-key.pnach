@@ -50,12 +50,15 @@ patch=1,EE,21F70C3C,extended,AFA4001C // sw a0, 0x1C(sp)  [entry addr]
 patch=1,EE,21F70C40,extended,9485006C // lhu a1, 0x6C(a0)
 patch=1,EE,21F70C44,extended,AFA50018 // sw a1, 0x18(sp)
 
-// +48: if key == 0xFFFF or 0 → restore_normal (+B0)
-patch=1,EE,21F70C48,extended,3C010001 // lui at, 1
-patch=1,EE,21F70C4C,extended,2421FFFF // addiu at, at, -1  [at=0xFFFF]
-patch=1,EE,21F70C50,extended,10A10017 // beq a1, at, +B0
+// +48: check if item is a dungeon key (0x151..0x15F)
+// a1 - 0x151; if unsigned result > 0xE, not a key → restore_normal
+patch=1,EE,21F70C48,extended,24A1FEAF // addiu at, a1, -0x151
+patch=1,EE,21F70C4C,extended,2C21000F // sltiu at, at, 15     ; at=1 if in range
+// beq at,zero → restore_normal(+B0). off=(B0-54)/4=0x17
+patch=1,EE,21F70C50,extended,10200017 // beq at, zero, +B0
 patch=1,EE,21F70C54,extended,00000000 // nop
-patch=1,EE,21F70C58,extended,10A00015 // beq a1, zero, +B0
+// (removed old beq a1,zero check — range check covers it)
+patch=1,EE,21F70C58,extended,00000000 // nop
 patch=1,EE,21F70C5C,extended,00000000 // nop
 
 // +60: GetNumSameItem(DngUserData, keyItemId)

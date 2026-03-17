@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from core.memory import Memory
+from core import settings
 from game.game_state import GameState, GameSnapshot
 from game import addresses as addr
 from game.hud import write_hud
@@ -26,6 +27,7 @@ class ModManager:
         self.auto_repair = False
         self.auto_key = False
         self.on_options_loaded = None  # callback(speed_label, pickup_label, map_label, map_tgt_label)
+        self.on_early_texture_patch = None  # callback to patch textures early
 
         self.all_mods = []
 
@@ -88,6 +90,8 @@ class ModManager:
                     self._apply_saved_options()
                     self._start_mods()
                     self._ingame = True
+                    if self.on_early_texture_patch:
+                        self.on_early_texture_patch()
                 else:
                     log.warning("Not a Reforged save file — mods disabled for this session.")
                     self._ingame = True  # mark as in-game so we don't keep checking
@@ -101,13 +105,12 @@ class ModManager:
             # Update HUD overlay
             if self._ingame:
                 try:
-                    write_hud(self.mem, loop_no)
+                    if settings.get("dungeon_hud") is not False:
+                        write_hud(self.mem, loop_no)
+                    else:
+                        self.mem.write_int(addr.HUD_FLAG, 0)
                 except Exception as e:
                     log.error("HUD error: %s", e)
-                try:
-                    self._debug_event_dialog()
-                except Exception:
-                    pass
                 try:
                     self._auto_repair_tick()
                 except Exception:
@@ -133,21 +136,6 @@ class ModManager:
             mod.stop()
         self._mods_started = False
         self._ingame = False
-
-    def _debug_event_dialog(self):
-        """Auto-dismiss the Magic Crystal chest dialog (msg 0x8CA)."""
-        scene_ptr = self.mem.read_int(addr.DNG_MAIN_SCENE)
-        if scene_ptr == 0:
-            return
-        pine_scene = 0x20000000 + scene_ptr
-        clsmes_ptr = self.mem.read_int(pine_scene + addr._SCENE_MSG_CLSMES_OFFSET)
-        if clsmes_ptr == 0:
-            return
-        pine_cls = 0x20000000 + clsmes_ptr
-        msg_id = self.mem.read_int(pine_cls + 0x17E4)
-        if msg_id == 0x8CA:
-            self.mem.write_int(pine_cls + 0x17E4, -1)
-            log.info("Auto-dismissed Magic Crystal dialog")
 
     def _apply_saved_options(self):
         """Read saved option bytes and sync UI dropdowns."""

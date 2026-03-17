@@ -2,6 +2,7 @@
 
 import logging
 from core.memory import Memory
+from core import settings
 from game import addresses as addr
 
 log = logging.getLogger(__name__)
@@ -15,25 +16,29 @@ _TREE_DNGMAP = 0x2037843C
 _BATTLE_SCENE = 0x203772A0
 
 _CONDITION_LABELS = {
-    0: "Defeat all in time",
-    1: "Max only",
-    2: "Specific weapon only",
-    3: "Monica only",
-    4: "Monster transform only",
+    0: "Defeat all",
+    1: "Attack with Max only",
+    2: "Attack with specific weapon",
+    3: "Attack with Monica only",
+    4: "Attack with Monster only",
     5: "Clear without healing",
-    6: "Wrench only",
-    7: "Gun only",
-    8: "Sword only",
-    9: "Armband only",
+    6: "Attack with Wrench only",
+    7: "Attack with Gun only",
+    8: "Attack with Sword only",
+    9: "Attack with Armband only",
+    10: "Attack with Ridepod only",
+    11: "Attack with Items only",
 }
 
 _VIOLATION_MASK = {
     0: 0,
-    1: 0x79,
+    1: 0x79,   # Max only: forbid Monica+Monster+Items+Ridepod
     2: 0x79,
-    3: 0x67,
-    4: 0x5F,
-    5: 0x80,
+    3: 0x67,   # Monica only: forbid Ridepod+Melee+Max+Items+Monster
+    4: 0x5F,   # Monster only: forbid everything except 0x20
+    5: 0x80,   # No healing
+    10: 0x7E,  # Ridepod only: forbid everything except 0x01
+    11: 0x3F,  # Items only: forbid everything except 0x40
 }
 
 # Per-floor session state
@@ -70,6 +75,7 @@ def write_hud(mem, loop_no):
 
     if loop_no not in (addr.Mode.DUNGEON, addr.Mode.TOWN):
         mem.write_int(addr.HUD_FLAG, 0)
+        _clear_synth(mem)
         _last_floor_ptr = None
         return
 
@@ -106,6 +112,10 @@ def write_hud(mem, loop_no):
         cond_param = mem.read_int(room + 0x1c)
         if cond_type == 2 and 1 <= cond_param <= 4:
             cond_type_id = cond_param + 5
+        elif cond_type == 3 and cond_param == 5:
+            cond_type_id = 10  # Ridepod only
+        elif cond_type == 1 and cond_param == 0:
+            cond_type_id = 11  # Items only
         else:
             cond_type_id = cond_type
         cond_label = _CONDITION_LABELS.get(cond_type_id, f"Condition {cond_type_id}")
@@ -167,6 +177,10 @@ def write_hud(mem, loop_no):
         lines.append(f"{m}{cond_label}")
 
     _write_lines(mem, lines)
+    if settings.get("synth_hud") is not False:
+        _write_synth(mem)
+    else:
+        _clear_synth(mem)
 
 
 def _write_lines(mem, lines):
@@ -179,3 +193,47 @@ def _write_lines(mem, lines):
             mem.write_int(base + j, word)
     mem.write_int(addr.HUD_LINE_COUNT, len(lines))
     mem.write_int(addr.HUD_FLAG, 1)
+
+
+def _write_synth_str(mem, pine_addr, s):
+    raw = s.encode("ascii")[:15] + b"\x00"
+    raw = raw.ljust(16, b"\x00")
+    for i in range(0, 16, 4):
+        word = int.from_bytes(raw[i:i+4], "little")
+        mem.write_int(pine_addr + i, word)
+
+
+def _clear_synth(mem):
+    _write_synth_str(mem, addr.SYNTH_STR_MELEE, "")
+    _write_synth_str(mem, addr.SYNTH_STR_RANGED, "")
+
+
+def _write_synth(mem):
+    # Only draw when the game's own HUD is visible (BattleAreaScene+0x48 != 0)
+    scene_ptr = mem.read_int(_BATTLE_SCENE)
+    if scene_ptr == 0:
+        _clear_synth(mem)
+        return
+    if mem.read_byte(_PINE + scene_ptr + 0x48) == 0:
+        _clear_synth(mem)
+        return
+    mode = mem.read_short(addr.BATTLE_PARAMATER + 0x06)
+    if mode != 0:
+        _clear_synth(mem)
+        return
+    base_ptr = mem.read_int(addr.BATTLE_PARAMATER + 0x30)
+    if base_ptr == 0:
+        _clear_synth(mem)
+        return
+    base = _PINE + base_ptr
+    for slot, str_addr in enumerate((addr.SYNTH_STR_MELEE, addr.SYNTH_STR_RANGED)):
+        off = slot * addr.WEAPON_SLOT_SIZE
+        item_id = mem.read_short(base + off + 0x02)
+        if item_id == 0 or item_id == 0xFFFF:
+            _write_synth_str(mem, str_addr, "")
+            continue
+        synth_pts = mem.read_short(base + off + 0x3C)
+        if synth_pts <= 0:
+            _write_synth_str(mem, str_addr, "")
+            continue
+        _write_synth_str(mem, str_addr, f"+{synth_pts}")

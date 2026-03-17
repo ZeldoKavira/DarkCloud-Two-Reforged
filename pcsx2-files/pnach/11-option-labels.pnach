@@ -1,122 +1,87 @@
-// Options screen draw hook — renders N custom labels + button text via CFont
-// Row count at 0x01F80058. Per row at 0x01F80000 + i*0x80:
-//   +0x00: label string (36 bytes)
-//   +0x24: btn0 text (8 bytes), +0x2C: btn1 text (8 bytes)
-//   +0x40: label X, +0x44: label Y
-//   +0x48: btn0 X, +0x4C: btn0 Y, +0x50: btn1 X, +0x54: btn1 Y
-// Clip: 0x01F8004C=top, 0x01F80050=bottom
-// Labels: gray text, fuchi=5, size 16/20
-// Button text: white text, fuchi=7, size 11/14
-
+// Label cave — form Y from 0x01F80054, smooth scroll, all offsets verified
 patch=1,EE,2035099C,extended,01F70E00
 patch=1,EE,21F80040,extended,00000056
 
-// Prologue
 patch=1,EE,21F70E00,extended,27BDFFC0
 patch=1,EE,21F70E04,extended,AFBF0000
 patch=1,EE,21F70E08,extended,AFB00004
 patch=1,EE,21F70E0C,extended,AFB10008
 patch=1,EE,21F70E10,extended,AFB2000C
 patch=1,EE,21F70E14,extended,AFB30010
-// FormDraw
 patch=1,EE,21F70E18,extended,8F849450
 patch=1,EE,21F70E1C,extended,0C08AD0C
 patch=1,EE,21F70E20,extended,00000000
-// Setup
 patch=1,EE,21F70E24,extended,3C1001F8
 patch=1,EE,21F70E28,extended,8E110058
-patch=1,EE,21F70E2C,extended,1220004F // beq s1,zero,ep (F6C)
+patch=1,EE,21F70E2C,extended,12200040
 patch=1,EE,21F70E30,extended,00000000
 patch=1,EE,21F70E34,extended,8E12004C
 patch=1,EE,21F70E38,extended,8E130050
-// Loop (E3C)
-patch=1,EE,21F70E3C,extended,92020000
-patch=1,EE,21F70E40,extended,10400046 // beq v0,zero,skip (F5C)
-patch=1,EE,21F70E44,extended,00000000
-patch=1,EE,21F70E48,extended,8E070044
-patch=1,EE,21F70E4C,extended,00F2182A
-patch=1,EE,21F70E50,extended,14600042 // bne v1,zero,skip
-patch=1,EE,21F70E54,extended,00F3182A
-patch=1,EE,21F70E58,extended,10600040 // beq v1,zero,skip
-patch=1,EE,21F70E5C,extended,00000000
-patch=1,EE,21F70E60,extended,AFA70018
-// Label font setup: fuchi=5, size=16/20, color=gray
-patch=1,EE,21F70E64,extended,3C04003E
-patch=1,EE,21F70E68,extended,24848090
-patch=1,EE,21F70E6C,extended,0C0B515C
-patch=1,EE,21F70E70,extended,34050005
+patch=1,EE,21F70E3C,extended,8E020054
+patch=1,EE,21F70E40,extended,AFA2001C
+patch=1,EE,21F70E44,extended,92020000
+patch=1,EE,21F70E48,extended,10400035
+patch=1,EE,21F70E4C,extended,00000000
+patch=1,EE,21F70E50,extended,8E070044
+patch=1,EE,21F70E54,extended,8FA2001C
+patch=1,EE,21F70E58,extended,00E23821
+patch=1,EE,21F70E5C,extended,00F2182A
+patch=1,EE,21F70E60,extended,1460002F
+patch=1,EE,21F70E64,extended,00F3182A
+patch=1,EE,21F70E68,extended,1060002D
+patch=1,EE,21F70E6C,extended,00000000
+patch=1,EE,21F70E70,extended,AFA70018
 patch=1,EE,21F70E74,extended,3C04003E
 patch=1,EE,21F70E78,extended,24848090
-patch=1,EE,21F70E7C,extended,34050010
-patch=1,EE,21F70E80,extended,0C0B5128
-patch=1,EE,21F70E84,extended,34060014
-patch=1,EE,21F70E88,extended,3C04003E
-patch=1,EE,21F70E8C,extended,24848090
-patch=1,EE,21F70E90,extended,34050010
-patch=1,EE,21F70E94,extended,0C0B512C
-patch=1,EE,21F70E98,extended,34060014
-patch=1,EE,21F70E9C,extended,3C04003E
-patch=1,EE,21F70EA0,extended,24848090
-patch=1,EE,21F70EA4,extended,3C058068
-patch=1,EE,21F70EA8,extended,0C0B5148
-patch=1,EE,21F70EAC,extended,34A56A6B
-// DrawDirect label
-patch=1,EE,21F70EB0,extended,3C04003E
-patch=1,EE,21F70EB4,extended,24848090
-patch=1,EE,21F70EB8,extended,26050000
-patch=1,EE,21F70EBC,extended,8E060040
-patch=1,EE,21F70EC0,extended,0C0B5688
-patch=1,EE,21F70EC4,extended,8FA70018
-// Button font setup: fuchi=7, size=11/14, color=white
-patch=1,EE,21F70EC8,extended,3C04003E
-patch=1,EE,21F70ECC,extended,24848090
-patch=1,EE,21F70ED0,extended,0C0B515C // SetFuchi
-patch=1,EE,21F70ED4,extended,34050007 // fuchi=7
-patch=1,EE,21F70ED8,extended,3C04003E
-patch=1,EE,21F70EDC,extended,24848090
-patch=1,EE,21F70EE0,extended,3405000B // size=11
-patch=1,EE,21F70EE4,extended,0C0B5128 // SetDrawSize
-patch=1,EE,21F70EE8,extended,3406000E // 14
-patch=1,EE,21F70EEC,extended,3C04003E
-patch=1,EE,21F70EF0,extended,24848090
-patch=1,EE,21F70EF4,extended,3405000B
-patch=1,EE,21F70EF8,extended,0C0B512C // SetClearance
-patch=1,EE,21F70EFC,extended,3406000E
-patch=1,EE,21F70F00,extended,3C04003E
-patch=1,EE,21F70F04,extended,24848090
-patch=1,EE,21F70F08,extended,3C0580FF // color=0x80FFFFFF (white)
-patch=1,EE,21F70F0C,extended,0C0B5148 // SetColor
-patch=1,EE,21F70F10,extended,34A5FFFF
-// btn0 text
-patch=1,EE,21F70F14,extended,92020024
-patch=1,EE,21F70F18,extended,10400007 // beq v0,zero,btn1 (F38)
-patch=1,EE,21F70F1C,extended,00000000
-patch=1,EE,21F70F20,extended,3C04003E
-patch=1,EE,21F70F24,extended,24848090
-patch=1,EE,21F70F28,extended,26050024
-patch=1,EE,21F70F2C,extended,8E060048
-patch=1,EE,21F70F30,extended,0C0B5688
-patch=1,EE,21F70F34,extended,8E07004C
-// btn1 text (F38)
-patch=1,EE,21F70F38,extended,9202002C
-patch=1,EE,21F70F3C,extended,10400007 // beq v0,zero,skip (F5C)
-patch=1,EE,21F70F40,extended,00000000
-patch=1,EE,21F70F44,extended,3C04003E
-patch=1,EE,21F70F48,extended,24848090
-patch=1,EE,21F70F4C,extended,2605002C
-patch=1,EE,21F70F50,extended,8E060050
-patch=1,EE,21F70F54,extended,0C0B5688
-patch=1,EE,21F70F58,extended,8E070054
-// Skip (F5C)
-patch=1,EE,21F70F5C,extended,26100080
-patch=1,EE,21F70F60,extended,2631FFFF
-patch=1,EE,21F70F64,extended,1620FFB5 // bne s1,zero,loop (E3C)
-patch=1,EE,21F70F68,extended,00000000
-// Epilogue (F6C)
-patch=1,EE,21F70F6C,extended,8FB30010
-patch=1,EE,21F70F70,extended,8FB2000C
-patch=1,EE,21F70F74,extended,8FB10008
-patch=1,EE,21F70F78,extended,8FB00004
-patch=1,EE,21F70F7C,extended,8FBF0000
-patch=1,EE,21F70F80,extended,03E00008
-patch=1,EE,21F70F84,extended,27BD0040
+patch=1,EE,21F70E7C,extended,0C0B515C
+patch=1,EE,21F70E80,extended,34050005
+patch=1,EE,21F70E84,extended,3C04003E
+patch=1,EE,21F70E88,extended,24848090
+patch=1,EE,21F70E8C,extended,34050010
+patch=1,EE,21F70E90,extended,0C0B5128
+patch=1,EE,21F70E94,extended,34060014
+patch=1,EE,21F70E98,extended,3C04003E
+patch=1,EE,21F70E9C,extended,24848090
+patch=1,EE,21F70EA0,extended,34050010
+patch=1,EE,21F70EA4,extended,0C0B512C
+patch=1,EE,21F70EA8,extended,34060014
+patch=1,EE,21F70EAC,extended,3C04003E
+patch=1,EE,21F70EB0,extended,24848090
+patch=1,EE,21F70EB4,extended,3C058068
+patch=1,EE,21F70EB8,extended,0C0B5148
+patch=1,EE,21F70EBC,extended,34A56A6B
+patch=1,EE,21F70EC0,extended,3C04003E
+patch=1,EE,21F70EC4,extended,24848090
+patch=1,EE,21F70EC8,extended,26050000
+patch=1,EE,21F70ECC,extended,8E060040
+patch=1,EE,21F70ED0,extended,0C0B5688
+patch=1,EE,21F70ED4,extended,8FA70018
+patch=1,EE,21F70ED8,extended,92020024
+patch=1,EE,21F70EDC,extended,10400007
+patch=1,EE,21F70EE0,extended,00000000
+patch=1,EE,21F70EE4,extended,3C04003E
+patch=1,EE,21F70EE8,extended,24848090
+patch=1,EE,21F70EEC,extended,26050024
+patch=1,EE,21F70EF0,extended,8E060048
+patch=1,EE,21F70EF4,extended,0C0B5688
+patch=1,EE,21F70EF8,extended,8E07004C
+patch=1,EE,21F70EFC,extended,9202002C
+patch=1,EE,21F70F00,extended,10400007
+patch=1,EE,21F70F04,extended,00000000
+patch=1,EE,21F70F08,extended,3C04003E
+patch=1,EE,21F70F0C,extended,24848090
+patch=1,EE,21F70F10,extended,2605002C
+patch=1,EE,21F70F14,extended,8E060050
+patch=1,EE,21F70F18,extended,0C0B5688
+patch=1,EE,21F70F1C,extended,8E070054
+patch=1,EE,21F70F20,extended,26100080
+patch=1,EE,21F70F24,extended,2631FFFF
+patch=1,EE,21F70F28,extended,1620FFC6
+patch=1,EE,21F70F2C,extended,00000000
+patch=1,EE,21F70F30,extended,8FB30010
+patch=1,EE,21F70F34,extended,8FB2000C
+patch=1,EE,21F70F38,extended,8FB10008
+patch=1,EE,21F70F3C,extended,8FB00004
+patch=1,EE,21F70F40,extended,8FBF0000
+patch=1,EE,21F70F44,extended,03E00008
+patch=1,EE,21F70F48,extended,27BD0040
