@@ -418,15 +418,18 @@ class App:
         val = self._auto_repair_var.get()
         self.manager.auto_repair = val
         settings.set("auto_repair", val)
+        self.state.mem.write_byte(addr.OPTION_SAVE_AUTO_REPAIR, 1 if val else 0)
 
     def _toggle_auto_key(self):
         val = self._auto_key_var.get()
         self.manager.auto_key = val
         settings.set("auto_key", val)
+        self.state.mem.write_byte(addr.OPTION_SAVE_AUTO_KEY, 1 if val else 0)
 
     def _toggle_synth_hud(self):
         val = self._synth_hud_var.get()
         settings.set("synth_hud", val)
+        self.state.mem.write_byte(addr.OPTION_SAVE_SYNTH_HUD, 0 if val else 1)
 
     def _set_run_speed(self):
         label = self._speed_var.get()
@@ -470,6 +473,10 @@ class App:
         settings.set("map_position", map_label)
         self._map_tgt_var.set(map_tgt_label)
         settings.set("map_position_target", map_tgt_label)
+        # Sync toggle checkboxes from save data
+        self._auto_repair_var.set(self.manager.auto_repair)
+        self._auto_key_var.set(self.manager.auto_key)
+        self._synth_hud_var.set(settings.get("synth_hud") is not False)
 
     def _apply_run_speed(self):
         label = self._speed_var.get()
@@ -1041,11 +1048,12 @@ class App:
             settings.set("run_speed", labels[val])
 
     def _on_auto_repair_change(self, val):
-        enabled = val == 0  # button 0 = ON, button 1 = OFF
+        enabled = val == 0
         self.manager.auto_repair = enabled
         settings.set("auto_repair", enabled)
         self._auto_repair_var.set(enabled)
         self.state.mem.write_byte(addr.AUTO_REPAIR_FLAG, 1 if enabled else 0)
+        self.state.mem.write_byte(addr.OPTION_SAVE_AUTO_REPAIR, 1 if enabled else 0)
 
     def _init_dng_speed(self):
         cur = self.state.mem.read_int(addr.SPEED_INSTR_DNG)
@@ -1071,6 +1079,7 @@ class App:
         self.manager.auto_key = enabled
         settings.set("auto_key", enabled)
         self._auto_key_var.set(enabled)
+        self.state.mem.write_byte(addr.OPTION_SAVE_AUTO_KEY, 1 if enabled else 0)
 
     def _init_map_pos(self):
         label = self._map_pos_var.get()
@@ -1121,8 +1130,9 @@ class App:
             pass
 
     def _on_dungeon_hud_change(self, val):
-        enabled = val == 0  # 0=ON, 1=OFF
+        enabled = val == 0
         settings.set("dungeon_hud", enabled)
+        self.state.mem.write_byte(addr.OPTION_SAVE_DUNGEON_HUD, 0 if enabled else 1)
         if not enabled:
             self.state.mem.write_int(addr.HUD_FLAG, 0)
 
@@ -1130,6 +1140,7 @@ class App:
         enabled = val == 0
         settings.set("synth_hud", enabled)
         self._synth_hud_var.set(enabled)
+        self.state.mem.write_byte(addr.OPTION_SAVE_SYNTH_HUD, 0 if enabled else 1)
 
     def _inject_btn_textures(self, cave, btn_templates):
         """Write custom button texture patch and create TexGetInfo entries."""

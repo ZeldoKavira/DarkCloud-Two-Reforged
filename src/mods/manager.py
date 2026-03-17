@@ -91,9 +91,14 @@ class ModManager:
                     continue  # was transient, not actually in-game yet
 
                 if loop_no == addr.Mode.TOWN and self.mem.read_byte(addr.ENHANCED_MOD_SAVE_FLAG) != 1:
-                    # New game — first time entering town, stamp the save
+                    # New game — stamp save and write defaults
                     self.mem.write_byte(addr.ENHANCED_MOD_SAVE_FLAG, 1)
-                    log.info("New game detected, set enhanced save flag")
+                    self.mem.write_byte(addr.OPTION_SAVE_RUN_SPEED, 1)       # 1.5x
+                    self.mem.write_byte(addr.OPTION_SAVE_PICKUP_RADIUS, 1)   # 2x
+                    self.mem.write_byte(addr.OPTION_SAVE_MAP_POS_TARGET, 4)  # Center-Right
+                    self.mem.write_byte(addr.OPTION_SAVE_AUTO_REPAIR, 1)     # on
+                    self.mem.write_byte(addr.OPTION_SAVE_AUTO_KEY, 1)        # on
+                    log.info("New game detected, set defaults")
 
                 if self.mem.read_byte(addr.ENHANCED_MOD_SAVE_FLAG) == 1:
                     log.info("Entering in-game (loop=%d), starting mods", loop_no)
@@ -171,6 +176,17 @@ class ModManager:
 
         log.info("Loaded saved options — town_speed=%s, dng_speed=%s, pickup=%s, map=%s, map_target=%s",
                  speed_label, dng_speed_label, pickup_label, map_label, map_tgt_label)
+
+        # Load toggle options from save data
+        self.auto_repair = self.mem.read_byte(addr.OPTION_SAVE_AUTO_REPAIR) == 1
+        self.auto_key = self.mem.read_byte(addr.OPTION_SAVE_AUTO_KEY) == 1
+        dungeon_hud = self.mem.read_byte(addr.OPTION_SAVE_DUNGEON_HUD) != 1  # 0=on (default)
+        synth_hud = self.mem.read_byte(addr.OPTION_SAVE_SYNTH_HUD) != 1
+        settings.set("auto_repair", self.auto_repair)
+        settings.set("auto_key", self.auto_key)
+        settings.set("dungeon_hud", dungeon_hud)
+        settings.set("synth_hud", synth_hud)
+
         if self.on_options_loaded:
             self.on_options_loaded(speed_label, pickup_label, map_label, map_tgt_label, dng_speed_label)
 

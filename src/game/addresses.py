@@ -113,7 +113,11 @@ OPTION_SAVE_PICKUP_RADIUS = _MOD_SAVE_BASE + 0x03  # Index into PICKUP_RADIUS_OP
 OPTION_SAVE_MAP_POS = _MOD_SAVE_BASE + 0x04        # Index into MINIMAP_POS_OPTIONS
 OPTION_SAVE_MAP_POS_TARGET = _MOD_SAVE_BASE + 0x05 # Index into MINIMAP_POS_OPTIONS (when targeting)
 OPTION_SAVE_DNG_SPEED = _MOD_SAVE_BASE + 0x06      # Index into SPEED_DNG_OPTIONS
-# Reserve _MOD_SAVE_BASE + 0x07 through +0xFF for future mod options
+OPTION_SAVE_AUTO_REPAIR = _MOD_SAVE_BASE + 0x07    # 1=enabled
+OPTION_SAVE_AUTO_KEY = _MOD_SAVE_BASE + 0x08        # 1=enabled
+OPTION_SAVE_DUNGEON_HUD = _MOD_SAVE_BASE + 0x09    # 0=enabled (default), 1=disabled
+OPTION_SAVE_SYNTH_HUD = _MOD_SAVE_BASE + 0x0A      # 0=enabled (default), 1=disabled
+# Reserve _MOD_SAVE_BASE + 0x0B through +0xFF for future mod options
 
 # --- Title screen ---
 TITLE_INFO_PTR = 0x20377E6C         # Pointer to TitleInfo struct
