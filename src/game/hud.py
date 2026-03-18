@@ -250,3 +250,157 @@ def _write_synth(mem):
             _write_synth_str(mem, str_addr, "")
             continue
         _write_synth_str(mem, str_addr, f"+{synth_pts}")
+
+
+# --- Gift box (clown chest) HUD ---
+
+_item_name_cache = {}
+
+
+def _read_item_name(mem, item_id):
+    """Read item name from game memory via the item data table."""
+    if item_id <= 0 or item_id >= 0x200:
+        return None
+    if item_id in _item_name_cache:
+        return _item_name_cache[item_id]
+    try:
+        # Read convert table entry
+        idx = mem.read_short(addr.ITEM_CONVERT_TABLE + item_id * 2)
+        if idx < 0:
+            return None
+        # Read base pointer
+        base = mem.read_int(addr.GAME_DATA_BASE_PTR)
+        if base == 0:
+            return None
+        # Entry = base + idx * 44, name pointer at +0x28
+        entry = _PINE + base + idx * 44
+        name_ptr = mem.read_int(entry + 0x28)
+        if name_ptr == 0:
+            return None
+        # Read null-terminated string (up to 32 bytes)
+        raw = b""
+        for i in range(0, 32, 4):
+            word = mem.read_int(_PINE + name_ptr + i)
+            raw += word.to_bytes(4, "little")
+            if b"\x00" in word.to_bytes(4, "little"):
+                break
+        name = raw.split(b"\x00")[0].decode("ascii", errors="replace")
+        if name:
+            _item_name_cache[item_id] = name
+        return name or None
+    except Exception:
+        return None
+
+
+
+
+_SCRIPT_VARS_PTR = addr.GIFT_BOX_SCRIPT_VARS
+
+def write_gift_box_hud(mem, _unused):
+    """Patch clown box dialog to show item names and guarantee chosen item."""
+    if not settings.get("gift_box_hud"):
+        return
+    scene = mem.read_int(0x2037729C)
+    if scene == 0:
+        return
+    msg_sys = mem.read_int(_PINE + scene + 0x2240)
+    if msg_sys == 0:
+        return
+    pine_cls = _PINE + msg_sys
+    msg_id = mem.read_int(pine_cls + 0x17E4)
+    patched = getattr(write_gift_box_hud, '_patched', False)
+
+    # Dialog closed — restore offset, force chosen item based on cursor
+    if patched and msg_id not in (0x8B7, 0x8B8):
+        mem.write_short(write_gift_box_hud._entry_addr, write_gift_box_hud._orig_off)
+        items = write_gift_box_hud._items
+        counts = write_gift_box_hud._counts
+        idx = getattr(write_gift_box_hud, '_last_cursor', 0)
+        if idx < 0 or idx >= len(items):
+            idx = 0
+        _force_chosen_item(mem, items[idx], counts[idx])
+        write_gift_box_hud._patched = False
+        return
+
+    # During 0x8B8 — force item only when cursor changes
+    if patched and msg_id == 0x8B8:
+        idx = mem.read_int(pine_cls + 0x1AE4)
+        items = write_gift_box_hud._items
+        counts = write_gift_box_hud._counts
+        if idx < 0 or idx >= len(items):
+            idx = 0
+        if idx != getattr(write_gift_box_hud, '_last_cursor', -1):
+            write_gift_box_hud._last_cursor = idx
+            _force_chosen_item(mem, items[idx], counts[idx])
+        return
+
+    if patched or msg_id != 0x8B7:
+        return
+
+    # --- Patch during 0x8B7 ---
+    tbl_ptr = mem.read_int(pine_cls + 0x21D4)
+    if tbl_ptr == 0:
+        return
+    tbl = _PINE + tbl_ptr
+    count = mem.read_short(tbl)
+    for i in range(min(count, 200)):
+        if mem.read_short(tbl + 4 + i * 4) == 0x8B8:
+            entry_addr = tbl + 4 + i * 4 + 2
+            break
+    else:
+        return
+
+    orig_off = mem.read_short(entry_addr)
+    last_off = mem.read_short(tbl + 4 + (count - 1) * 4 + 2)
+    last_text = tbl + (count + 1) * 2 + last_off * 2
+
+    # Read items from treasure box
+    bs = mem.read_int(0x203772A0)
+    if bs == 0:
+        return
+    tbm = mem.read_int(_PINE + bs + 0x7C)
+    if tbm == 0:
+        return
+    sel = mem.read_int(_PINE + tbm + 0xA9C)
+    if sel < 0 or sel >= 0x18:
+        return
+    box = _PINE + tbm + sel * 0x70
+    item1 = mem.read_short(box + 0x6C)
+    item2 = mem.read_short(box + 0x6E)
+    cnt1 = max(mem.read_short(box + 0x70), 1)
+    cnt2 = max(mem.read_short(box + 0x72), 1)
+    name1 = (_read_item_name(mem, item1) if 0 < item1 < 0xFFFF else "???") or f"#{item1:03X}"
+    name2 = (_read_item_name(mem, item2) if 0 < item2 < 0xFFFF else "???") or f"#{item2:03X}"
+    q1 = f"{cnt1}x " if cnt1 > 1 else ""
+    q2 = f"{cnt2}x " if cnt2 > 1 else ""
+
+    # First option = item1, second = item2
+    from game.dialog import encode
+    encoded = encode(f"The red box ({q1}{name1}){{n}}The yellow box ({q2}{name2})")
+    for i, s in enumerate(encoded):
+        mem.write_short(last_text + i * 2, s)
+    mem.write_short(entry_addr, last_off)
+
+    # Store state — player picks option 0 or 1, we force that item
+    write_gift_box_hud._patched = True
+    write_gift_box_hud._orig_off = orig_off
+    write_gift_box_hud._entry_addr = entry_addr
+    write_gift_box_hud._items = [item1, item2]
+    write_gift_box_hud._counts = [cnt1, cnt2]
+    write_gift_box_hud._pine_cls = pine_cls
+    write_gift_box_hud._last_cursor = -1
+    _force_chosen_item(mem, item1, cnt1)
+
+
+def _force_chosen_item(mem, chosen, cnt):
+    """Write chosen item to all script variable slots."""
+    sp = mem.read_int(_SCRIPT_VARS_PTR)
+    if sp == 0:
+        return
+    p = _PINE + sp
+    mem.write_int(p + 0x0C, chosen)
+    mem.write_int(p + 0x14, chosen)
+    mem.write_int(p + 0x4C, chosen)
+    mem.write_int(p + 0x5C, chosen)
+    mem.write_int(p + 0x1C, cnt)
+    mem.write_int(p + 0x54, cnt)

@@ -242,6 +242,30 @@ class App:
         ttk.Label(opts, text="Display pending synthesis points on weapon icons",
                   style="Dim.TLabel").pack(anchor=tk.W, padx=20)
 
+        self._gift_box_var = tk.BooleanVar(value=settings.get("gift_box_hud") or False)
+        tk.Checkbutton(opts, text="Show Gift Box Contents", variable=self._gift_box_var,
+                       command=self._toggle_gift_box, bg=BG_PANEL, fg=FG,
+                       selectcolor=BG, activebackground=BG_PANEL, activeforeground=FG,
+                       font=("Helvetica", 10)).pack(anchor=tk.W, pady=(8, 2))
+        ttk.Label(opts, text="Reveal item names in clown chest boxes",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
+        self._start_map_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(opts, text="Start With Map", variable=self._start_map_var,
+                       command=self._toggle_start_map, bg=BG_PANEL, fg=FG,
+                       selectcolor=BG, activebackground=BG_PANEL, activeforeground=FG,
+                       font=("Helvetica", 10)).pack(anchor=tk.W, pady=(8, 2))
+        ttk.Label(opts, text="Automatically reveal the dungeon map on each floor",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
+        self._start_crystal_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(opts, text="Start With Crystal", variable=self._start_crystal_var,
+                       command=self._toggle_start_crystal, bg=BG_PANEL, fg=FG,
+                       selectcolor=BG, activebackground=BG_PANEL, activeforeground=FG,
+                       font=("Helvetica", 10)).pack(anchor=tk.W, pady=(8, 2))
+        ttk.Label(opts, text="Automatically place the magic crystal on each floor",
+                  style="Dim.TLabel").pack(anchor=tk.W, padx=20)
+
         # Town speed
         speed_row = ttk.Frame(opts, style="Panel.TFrame")
         speed_row.pack(anchor=tk.W, pady=(8, 2))
@@ -431,6 +455,19 @@ class App:
         settings.set("synth_hud", val)
         self.state.mem.write_byte(addr.OPTION_SAVE_SYNTH_HUD, 0 if val else 1)
 
+    def _toggle_gift_box(self):
+        val = self._gift_box_var.get()
+        settings.set("gift_box_hud", val)
+        self.state.mem.write_byte(addr.OPTION_SAVE_GIFT_BOX, 0 if val else 1)
+
+    def _toggle_start_map(self):
+        val = self._start_map_var.get()
+        self.state.mem.write_byte(addr.OPTION_SAVE_START_MAP, 1 if val else 0)
+
+    def _toggle_start_crystal(self):
+        val = self._start_crystal_var.get()
+        self.state.mem.write_byte(addr.OPTION_SAVE_START_CRYSTAL, 1 if val else 0)
+
     def _set_run_speed(self):
         label = self._speed_var.get()
         settings.set("run_speed", label)
@@ -477,6 +514,8 @@ class App:
         self._auto_repair_var.set(self.manager.auto_repair)
         self._auto_key_var.set(self.manager.auto_key)
         self._synth_hud_var.set(settings.get("synth_hud") is not False)
+        self._start_map_var.set(self.manager.mem.read_byte(addr.OPTION_SAVE_START_MAP) == 1)
+        self._start_crystal_var.set(self.manager.mem.read_byte(addr.OPTION_SAVE_START_CRYSTAL) == 1)
 
     def _apply_run_speed(self):
         label = self._speed_var.get()
@@ -621,7 +660,32 @@ class App:
     }
 
     def _test_dialog(self):
-        self.dialog.ask("Do you want a DC2 mod?", callback=self._on_answer)
+        """Convert all active chests on current floor to 2-choice boxes with their existing item + a bonus."""
+        try:
+            mem = self.state.mem
+            scene = mem.read_int(0x203772A0)
+            if scene == 0:
+                return
+            tbm = mem.read_int(0x20000000 + scene + 0x7C)
+            if tbm == 0:
+                return
+            pine_tbm = 0x20000000 + tbm
+            count = 0
+            for i in range(0x18):
+                base = pine_tbm + i * 0x70
+                status = mem.read_byte(base + 0x64)
+                if status == 1:
+                    flags = mem.read_int(base + 0x68)
+                    if not (flags & 0x180):  # not already 2-box or mimic
+                        item1 = mem.read_short(base + 0x6C)
+                        # Set 2-box flag, keep existing item1, add Repair Powder as item2
+                        mem.write_int(base + 0x68, flags | 0x80)
+                        mem.write_short(base + 0x6E, 0x126)  # Repair Powder as 2nd choice
+                        mem.write_short(base + 0x72, 1)      # count for 2nd item
+                        count += 1
+            log.info("Converted %d chests to 2-choice boxes", count)
+        except Exception as e:
+            log.error("2-box inject failed: %s", e)
 
     def _on_answer(self, choice):
         self.dialog.show("You chose: " + ("Yes" if choice else "No"), duration=10, mode=0)
@@ -641,6 +705,12 @@ class App:
                     self._opts_injected = False
                     self.state.mem.write_int(0x21F70B60, 0)
                     self.state.mem.write_int(0x21F70B70, 0)
+                    # Restore original help text
+                    if self._last_desc and hasattr(self, '_help_text_addr') and hasattr(self, '_orig_help_text'):
+                        for i, s in enumerate(self._orig_help_text):
+                            self.state.mem.write_short(self._help_text_addr + i * 2, s)
+                        self.state.mem.write_int(self._help_msg_ptr + 0x17E4, -1)
+                        self._last_desc = ""
         except Exception:
             pass
         self.root.after(500, self._options_auto_poll)
@@ -665,14 +735,16 @@ class App:
             self._last_opt_vals = {}
             # Find help message text address for description swapping
             self._orig_help_text = [
-                0xFD1A,0x0037,0x0047,0x0048,0x004B,0x0044,0xFF02,0x0047,0x004E,0x004B,
-                0x0043,0x0048,0x004D,0x0046,0xFF02,0xFD03,0xFF02,0x004F,0x0051,0x0044,
-                0x0052,0x0052,0xFD06,0x0064,0x0030,0x0048,0x0042,0x004A,0xFF02,0x0054,
-                0x004F,0xFF02,0x0041,0x004E,0x004C,0x0041,0xFF00,0x005E,0xFF02,0x0037,
-                0x0047,0x0048,0x004B,0x0044,0xFF02,0x0047,0x004E,0x004B,0x0043,0x0048,
-                0x004D,0x0046,0xFF02,0x0041,0x004E,0x004C,0x0041,0xFF02,0x004F,0x0051,
-                0x0044,0x0052,0x0052,0xFD06,0x0064,0x0034,0x0047,0x0051,0x004E,0x0056,
-                0xFF02,0x0041,0x004E,0x004C,0x0041,0xFF01,0xFF00,
+                0x0023,0x0047,0x0040,0x004D,0x0046,0x0044,0xFF02,0x0052,0x0044,0x0053,
+                0x0053,0x0048,0x004D,0x0046,0x0052,0xFF02,0x0056,0x0048,0x0053,0x0047,
+                0xFF02,0xFD06,0xFF02,0x0041,0x0054,0x0053,0x0053,0x004E,0x004D,0x000E,
+                0xFF02,0x0025,0x004D,0x0043,0xFF02,0x0056,0x0048,0x0053,0x0047,0xFF02,
+                0xFD08,0xFF02,0x0041,0x0054,0x0053,0x0053,0x004E,0x004D,0x000E,0xFF00,
+                0x0032,0x0044,0x0053,0x0054,0x0051,0x004D,0xFF02,0x0053,0x004E,0xFF02,
+                0x004E,0x0051,0x0048,0x0046,0x0048,0x004D,0x0040,0x004B,0xFF02,0x0052,
+                0x0044,0x0053,0x0053,0x0048,0x004D,0x0046,0x0052,0xFF02,0x0056,0x0048,
+                0x0053,0x0047,0xFF02,0xFD09,0xFF02,0x0041,0x0054,0x0053,0x0053,0x004E,
+                0x004D,0x000E,0xFF01,0xFF00,
             ]
             try:
                 self._help_msg_ptr = 0x20000000 + self.state.mem.read_int(0x21ECCA40 + 3 * 4)
@@ -760,8 +832,14 @@ class App:
                     self.state.mem.write_int(FLAG_BASE + 0x08, i32(bsx - 2))
                     self.state.mem.write_int(FLAG_BASE + 0x0C, i32(bsy - 3))
                     mci_ps2 = self.state.mem.read_int(addr.MENU_COMMON_INFO)
+                    if mci_ps2 == 0:
+                        self.root.after(16, self._options_cursor_poll)
+                        return
                     pine_mci = 0x20000000 + mci_ps2
                     rect_form_ps2 = self.state.mem.read_int(pine_mci + 0x13C)
+                    if rect_form_ps2 == 0:
+                        self.root.after(16, self._options_cursor_poll)
+                        return
                     pine_rect_form = 0x20000000 + rect_form_ps2
                     rect_part0_ps2 = self.state.mem.read_int(pine_rect_form + 0x6C)
                     self.state.mem.write_int(FLAG_BASE + 0x10, rect_part0_ps2)
@@ -786,7 +864,11 @@ class App:
                     if self._last_desc != desc:
                         from game.dialog import encode
                         self._encoded_desc = encode(desc)
-                        for i in range(max(len(self._encoded_desc), len(self._orig_help_text))):
+                        max_len = len(self._orig_help_text)
+                        if len(self._encoded_desc) > max_len:
+                            log.error("Description too long (%d/%d shorts): %s", len(self._encoded_desc), max_len, desc[:60])
+                            self._encoded_desc = self._encoded_desc[:max_len - 2] + [0xFF01, 0xFF00]
+                        for i in range(max_len):
                             self.state.mem.write_short(
                                 self._help_text_addr + i * 2,
                                 self._encoded_desc[i] if i < len(self._encoded_desc) else 0)
@@ -809,7 +891,7 @@ class App:
                     self._desc_pending_restore = False
             for row_i, row in enumerate(self._custom_rows):
                 game_row = 16 + row_i
-                cfg_addr = 0x21F80500 + row_i * 4
+                cfg_addr = self._config_base_pine + row_i * 4
                 new_val = self.state.mem.read_int(cfg_addr)
                 old_val = self._last_opt_vals.get(row_i)
                 if old_val is not None and new_val != old_val:
@@ -834,51 +916,66 @@ class App:
         pack_f = lambda f: struct.unpack('I', struct.pack('f', f))[0]
 
         self._custom_rows = [
-            {"label": "Run Speed (Town)",              "buttons": 3, "config_ps2": 0x01F80500,
+            {"label": "Run Speed (Town)",              "buttons": 3,
              "btn_tex": [127, 128, 129], "btn_text": [],
              "init": self._init_run_speed,
              "on_change": self._on_run_speed_change,
              "desc": "Mutiplies movement speed in town areas."},
-            {"label": "Run Speed (Dungeon)",           "buttons": 3, "config_ps2": 0x01F80504,
+            {"label": "Run Speed (Dungeon)",           "buttons": 3,
              "btn_tex": [127, 128, 129], "btn_text": [],
              "init": self._init_dng_speed,
              "on_change": self._on_dng_speed_change,
              "desc": "Mutiplies movement speed in dungeons."},
-            {"label": "Auto Use Repair Powder",        "buttons": 2, "config_ps2": 0x01F80508,
+            {"label": "Auto Use Repair Powder",        "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if self.manager.auto_repair else 1,
              "on_change": self._on_auto_repair_change,
              "desc": "Automatically uses Repair Powder when weapons break{n}if the appropriate repair powder is available."},
-            {"label": "Auto Insert Dungeon Keys",      "buttons": 2, "config_ps2": 0x01F8050C,
+            {"label": "Auto Insert Dungeon Keys",      "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if self.manager.auto_key else 1,
              "on_change": self._on_auto_key_change,
-             "desc": "Auto-use keys on locked doors when pressing X.{n}No need to manually select keys with Square."},
-            {"label": "Map Pos.",                      "buttons": 3, "config_ps2": 0x01F80510,
+             "desc": "Auto-use keys on locked doors when pressing {sq}."},
+            {"label": "Map Pos.",                      "buttons": 3,
              "btn_tex": [130, 131, 132], "btn_text": [],
              "init": self._init_map_pos,
              "on_change": self._on_map_pos_change,
              "desc": "Offsets large map position during normal gameplay."},
-            {"label": "Map Pos. (Targeting Enemy)",    "buttons": 3, "config_ps2": 0x01F80514,
+            {"label": "Map Pos. (Targeting Enemy)",    "buttons": 3,
              "btn_tex": [130, 131, 132], "btn_text": [],
              "init": self._init_map_tgt,
              "on_change": self._on_map_tgt_change,
              "desc": "Offsets large map position while targeting an enemy{n}to move it out of the way."},
-            {"label": "Pickup Radius",                 "buttons": 3, "config_ps2": 0x01F80518,
+            {"label": "Pickup Radius",                 "buttons": 3,
              "btn_tex": [127, 129, 133], "btn_text": [],
              "init": self._init_pickup,
              "on_change": self._on_pickup_change,
              "desc": "Adjust item, experience, etc pickup range."},
-            {"label": "Show Medal HUD",                 "buttons": 2, "config_ps2": 0x01F8051C,
+            {"label": "Show Medal HUD",                 "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if settings.get("dungeon_hud") is not False else 1,
              "on_change": self._on_dungeon_hud_change,
              "desc": "Show dungeon floor medal requirements and completion{n}status on screen."},
-            {"label": "Show Synth Points HUD",        "buttons": 2, "config_ps2": 0x01F80520,
+            {"label": "Show Synth Points HUD",        "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if settings.get("synth_hud") is not False else 1,
              "on_change": self._on_synth_hud_change,
              "desc": "Show pending synthesis points on weapon icons."},
+            {"label": "Start With Map",                "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_START_MAP) == 1 else 1,
+             "on_change": self._on_start_map_change,
+             "desc": "Automatically reveal the dungeon map on each floor."},
+            {"label": "Start With Crystal",            "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_START_CRYSTAL) == 1 else 1,
+             "on_change": self._on_start_crystal_change,
+             "desc": "Automatically place the magic crystal on each floor."},
+            {"label": "Show Gift Box Items",           "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if settings.get("gift_box_hud") is not False else 1,
+             "on_change": self._on_gift_box_change,
+             "desc": "Show item names in clown chest boxes and guarantee{n}you receive the item you select."},
         ]
         num_rows = len(self._custom_rows)
         total_new_parts = sum(r["buttons"] for r in self._custom_rows)
@@ -912,10 +1009,16 @@ class App:
         names_base = cave + (old_count + total_new_parts) * 0x48
         name_idx = 0
 
+        # Config values go right after all label data
+        config_base_ps2 = 0x01F80000 + num_rows * 0x80
+        config_base_pine = 0x20000000 + config_base_ps2
+        self._config_base_pine = config_base_pine
+
         for row_i, row in enumerate(self._custom_rows):
             game_row = 16 + row_i
+            row["config_ps2"] = config_base_ps2 + row_i * 4
             init_val = row["init"]()
-            self.state.mem.write_int(0x21F80500 + row_i * 4, init_val)
+            self.state.mem.write_int(config_base_pine + row_i * 4, init_val)
 
             for b in range(row["buttons"]):
                 a = cave + part_idx * 0x48
@@ -1020,11 +1123,12 @@ class App:
         if mci_ps2:
             pine_mci = 0x20000000 + mci_ps2
             rect_form_ps2 = self.state.mem.read_int(pine_mci + 0x13C)
-            pine_rect_form = 0x20000000 + rect_form_ps2
-            rect_part0_ps2 = self.state.mem.read_int(pine_rect_form + 0x6C)
-            self.state.mem.write_int(0x21F70B70, rect_part0_ps2)
-            self.state.mem.write_int(0x21F70B74, pack_f(50.0))  # default, poll overrides
-            self.state.mem.write_int(0x21F70B78, pack_f(16.0))
+            if rect_form_ps2:
+                pine_rect_form = 0x20000000 + rect_form_ps2
+                rect_part0_ps2 = self.state.mem.read_int(pine_rect_form + 0x6C)
+                self.state.mem.write_int(0x21F70B70, rect_part0_ps2)
+                self.state.mem.write_int(0x21F70B74, pack_f(50.0))
+                self.state.mem.write_int(0x21F70B78, pack_f(16.0))
 
         log.info("Injected %d custom rows (%d parts, count %d→%d)",
                  num_rows, total_new_parts, old_count, new_count)
@@ -1141,6 +1245,22 @@ class App:
         settings.set("synth_hud", enabled)
         self._synth_hud_var.set(enabled)
         self.state.mem.write_byte(addr.OPTION_SAVE_SYNTH_HUD, 0 if enabled else 1)
+
+    def _on_start_map_change(self, val):
+        enabled = val == 0
+        self.state.mem.write_byte(addr.OPTION_SAVE_START_MAP, 1 if enabled else 0)
+        self._start_map_var.set(enabled)
+
+    def _on_start_crystal_change(self, val):
+        enabled = val == 0
+        self.state.mem.write_byte(addr.OPTION_SAVE_START_CRYSTAL, 1 if enabled else 0)
+        self._start_crystal_var.set(enabled)
+
+    def _on_gift_box_change(self, val):
+        enabled = val == 0
+        settings.set("gift_box_hud", enabled)
+        self._gift_box_var.set(enabled)
+        self.state.mem.write_byte(addr.OPTION_SAVE_GIFT_BOX, 0 if enabled else 1)
 
     def _inject_btn_textures(self, cave, btn_templates):
         """Write custom button texture patch and create TexGetInfo entries."""

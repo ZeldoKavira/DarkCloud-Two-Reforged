@@ -121,7 +121,7 @@ class ModManager:
             if self._ingame:
                 hud_counter = getattr(self, '_hud_counter', 0) + 1
                 self._hud_counter = hud_counter
-                if hud_counter % 200 == 0:  # ~every 200ms
+                if hud_counter % 50 == 0:
                     try:
                         if settings.get("dungeon_hud") is not False:
                             write_hud(self.mem, loop_no)
@@ -133,10 +133,20 @@ class ModManager:
                         self._auto_key_tick()
                     except Exception:
                         pass
+                    try:
+                        self._start_floor_tick()
+                    except Exception:
+                        pass
                 try:
                     self._auto_repair_tick()
                 except Exception:
                     pass
+                if hud_counter % 30 == 0:
+                    try:
+                        from game.hud import write_gift_box_hud
+                        write_gift_box_hud(self.mem, None)
+                    except Exception:
+                        pass
 
             time.sleep(0.001)
 
@@ -186,6 +196,8 @@ class ModManager:
         settings.set("auto_key", self.auto_key)
         settings.set("dungeon_hud", dungeon_hud)
         settings.set("synth_hud", synth_hud)
+        gift_box = self.mem.read_byte(addr.OPTION_SAVE_GIFT_BOX) != 1
+        settings.set("gift_box_hud", gift_box)
 
         if self.on_options_loaded:
             self.on_options_loaded(speed_label, pickup_label, map_label, map_tgt_label, dng_speed_label)
@@ -226,6 +238,42 @@ class ModManager:
             self.mem.write_int(addr.AUTO_REPAIR_FLAG, 1 if cache else 0)
             self._repair_flag_set = bool(cache)
             self._repair_needs_scan = False
+
+    def _start_floor_tick(self):
+        """Reveal map / place crystal on new dungeon floors."""
+        ptr = self.mem.read_int(addr.NOW_FLOOR_INFO_PTR)
+        if ptr == 0:
+            self._last_floor_ptr_sf = None
+            return
+        if ptr == getattr(self, '_last_floor_ptr_sf', None):
+            return
+        self._last_floor_ptr_sf = ptr
+        PINE = 0x20000000
+        log.info("New floor detected (ptr=0x%X)", ptr)
+        scene_ptr = self.mem.read_int(0x2037729C)  # DngMainScene
+        if scene_ptr == 0:
+            return
+        scene = PINE + scene_ptr
+        flags = self.mem.read_int(scene + 0x2FF4)
+        if self.mem.read_byte(addr.OPTION_SAVE_START_MAP) == 1:
+            flags |= 1
+            self._reveal_map()
+        if self.mem.read_byte(addr.OPTION_SAVE_START_CRYSTAL) == 1:
+            flags |= 2
+        self.mem.write_int(scene + 0x2FF4, flags)
+
+    def _reveal_map(self):
+        """Replicate MinimapAllVisible — set all map cells visible."""
+        PINE = 0x20000000
+        automap = PINE + 0x01EA0480
+        w = self.mem.read_short(automap + 0x1B8)
+        h = self.mem.read_short(automap + 0x1BA)
+        grid_ptr = self.mem.read_int(automap + 0x1CC)
+        if grid_ptr == 0 or w == 0 or h == 0:
+            return
+        grid = PINE + grid_ptr
+        for i in range(w * h):
+            self.mem.write_short(grid + i * 0x1C + 0x0C, 1)
 
     def _auto_key_tick(self):
         """Auto-use dungeon key on gate when player presses X."""

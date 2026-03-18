@@ -1,8 +1,18 @@
 # Dark Cloud 2 Reforged
 
+> ⚠️ **THIS MOD IS IN ALPHA.** You <b>WILL</b> experience crashes and lose progress. Proceed at your own risk.
+
 A cross-platform mod for **Dark Cloud 2** (Dark Chronicle) using **PINE IPC** to communicate with PCSX2. Compatible with modern PCSX2 builds (v1.7+ and Nightly) on **Windows, Linux, and macOS** — including Steam Deck.
 
 Built using the same framework as [Dark Cloud Reforged](https://github.com/ZeldoKavira/DarkCloud-Reforged).
+
+## Steam Deck (One-Liner Install)
+
+```bash
+bash <(curl -s https://raw.githubusercontent.com/ZeldoKavira/DarkCloud-Two-Reforged/main/scripts/steamdeck-setup.sh)
+```
+
+This downloads PCSX2, the mod, and the PNACH cheats file. It prompts you for your ISO and BIOS, then adds the game to Steam. Re-run to update.
 
 ## Requirements
 

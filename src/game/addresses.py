@@ -117,7 +117,10 @@ OPTION_SAVE_AUTO_REPAIR = _MOD_SAVE_BASE + 0x07    # 1=enabled
 OPTION_SAVE_AUTO_KEY = _MOD_SAVE_BASE + 0x08        # 1=enabled
 OPTION_SAVE_DUNGEON_HUD = _MOD_SAVE_BASE + 0x09    # 0=enabled (default), 1=disabled
 OPTION_SAVE_SYNTH_HUD = _MOD_SAVE_BASE + 0x0A      # 0=enabled (default), 1=disabled
-# Reserve _MOD_SAVE_BASE + 0x0B through +0xFF for future mod options
+OPTION_SAVE_START_MAP = _MOD_SAVE_BASE + 0x0B       # 1=start with map
+OPTION_SAVE_START_CRYSTAL = _MOD_SAVE_BASE + 0x0C   # 1=start with crystal
+OPTION_SAVE_GIFT_BOX = _MOD_SAVE_BASE + 0x0D        # 0=enabled (default), 1=disabled
+# Reserve _MOD_SAVE_BASE + 0x0D through +0xFF for future mod options
 
 # --- Title screen ---
 TITLE_INFO_PTR = 0x20377E6C         # Pointer to TitleInfo struct
@@ -305,6 +308,15 @@ REPAIR_POWDER_MELEE = 0x126         # Repair Powder (weapon sub-types 1,3,0xD)
 REPAIR_POWDER_RANGED = 0x12A        # Gun Repair Powder (weapon sub-type 2)
 HUD_TEXT_BASE = 0x21F70A00          # Text lines, 64 bytes each (6 lines max)
 HUD_LINE_LEN = 64                   # Max bytes per line (including null)
+
+# Item data (for reading item names from game memory)
+GAME_DATA = 0x21E69570              # CGameData instance
+GAME_DATA_BASE_PTR = 0x21E69574     # CGameData+4: pointer to item common data array
+ITEM_CONVERT_TABLE = 0x21E71B70     # local_itemdatano_converttable: short[0x200]
+# CommonData entry: index * 44 bytes, +0x28 = pointer to name string
+
+# Gift box (clown chest) — script variable pointer for item forcing
+GIFT_BOX_SCRIPT_VARS = 0x21ECE3E0   # pointer to event script local vars
 
 # Floor info pointers (set by game when on a dungeon floor)
 DNG_INFO_FLOOR_INFO = 0x203773C0    # Ptr to current floor save data (medal flags etc)

@@ -18,8 +18,8 @@ patch=1,EE,21F70F60,extended,00000000 // nop
 // D14 check HUD_FLAG
 patch=1,EE,21F70F64,extended,3C0201F7 // lui v0, 0x01F7
 patch=1,EE,21F70F68,extended,8C420040 // lw v0, 0x0040(v0)
-// D1C beq v0,zero -> epilogue @DE8; off=(DE8-D20)/4=0x32
-patch=1,EE,21F70F6C,extended,10400032 // beq v0, zero, DE8
+// D1C beq v0,zero -> epilogue @1038; off=(1038-F70)/4=0x32
+patch=1,EE,21F70F6C,extended,10400032 // beq v0, zero, 1038
 patch=1,EE,21F70F70,extended,00000000 // nop
 // D24 check anim float >= 1.0 (with null check for BattleAreaScene)
 patch=1,EE,21F70F74,extended,8F828DB0 // lw v0, -0x7250(gp)

@@ -33,7 +33,11 @@ for _c in range(0x01, 0x3C):
     _DC2[chr(_c + 0x20)] = _c
 for _c in range(0x3C, 0x5E):
     _DC2[chr(_c + 0x21)] = _c
-_TAGS = {'red': [0xFC01], 'reset': [0xFC00], 'n': [0xFF00]}
+_TAGS = {
+    'red': [0xFC01], 'reset': [0xFC00], 'n': [0xFF00],
+    'x': [0xFD06], 'o': [0xFD03], 'tri': [0xFD08], 'sq': [0xFD09],
+    'l1': [0xFD07], 'r1': [0xFD0A], 'l2': [0xFD0B], 'r2': [0xFD0C],
+}
 
 
 def encode(text):
