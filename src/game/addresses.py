@@ -220,9 +220,8 @@ PICKUP_RADIUS_INSTR = 0x201b9144
 
 PICKUP_RADIUS_OPTIONS = {
     "1x (Default)": 0x41a0,   # 20.0
-    "2x":           0x4220,   # 40.0
-    "3x":           0x4270,   # 60.0
     "5x":           0x42c8,   # 100.0
+    "15x":          0x4396,   # 300.0
 }
 
 def pickup_radius_lui(upper16):
@@ -286,8 +285,10 @@ FISHING_FISH_NAME_TBL = 0x2035D9B0  # Array of 18 pointers to fish name strings
 HUD_LINE_COUNT = 0x21F70044         # Number of lines to draw (max 6)
 
 # --- Auto repair powder ---
-AUTO_REPAIR_FLAG = 0x21F70048       # 1=auto-repair enabled (set by Python)
-REPAIR_CONSUMED = 0x21F7004C        # Set by PNACH cave: 1=melee powder used, 2=ranged powder used
+AUTO_REPAIR_FLAG = 0x21F70048       # 1=melee powder available (set by Python)
+AUTO_REPAIR_FLAG_RANGED = 0x21F7004C # 1=gun powder available (set by Python)
+AUTO_REPAIR_FLAG_ARMBAND = 0x21F70050 # 1=armband powder available (set by Python)
+REPAIR_CONSUMED = 0x21F70054        # Set by PNACH cave: 1=melee, 2=gun, 3=armband
 
 # --- Weapon / ABS data ---
 # BattleParamater (CBattleCharaInfo) at 0x01E9B130
@@ -310,10 +311,15 @@ SYNTH_STR_RANGED = 0x21F70068      # 16-byte ASCII string for ranged synth point
 USER_DATA_MANAGER = 0x21E1EAB0
 INVENTORY_SLOT_SIZE = 0x6C
 INVENTORY_SLOT_COUNT = 150
+EQUIP_SLOT_BASE = 0x21E22A24        # Max equipped item slots (0x6C each)
+EQUIP_SLOT_BASE_MON = 0x21E22B94    # Monica equipped item slots (0x6C each)
+EQUIP_SLOT_COUNT = 8                # Slots per character
 
 # Repair powder item IDs (from GetEnableRepairItemNo)
 REPAIR_POWDER_MELEE = 0x126         # Repair Powder (weapon sub-types 1,3,0xD)
 REPAIR_POWDER_RANGED = 0x12A        # Gun Repair Powder (weapon sub-type 2)
+REPAIR_POWDER_ARMBAND = 0x160       # Armband Repair Powder (Monica's armband)
+ACTIVE_CHARA_NO = 0x2037715C        # 0=Max, 1=Monica
 HUD_TEXT_BASE = 0x21F70A00          # Text lines, 64 bytes each (6 lines max)
 HUD_LINE_LEN = 64                   # Max bytes per line (including null)
 

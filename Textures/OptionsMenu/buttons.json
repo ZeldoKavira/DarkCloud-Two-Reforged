@@ -5,5 +5,6 @@
   {"text": "Off",     "size": "small"},
   {"text": "Left",    "size": "small"},
   {"text": "Right",   "size": "small"},
-  {"text": "5x",      "size": "small"}
+  {"text": "5x",      "size": "small"},
+  {"text": "15x",     "size": "small"}
 ]

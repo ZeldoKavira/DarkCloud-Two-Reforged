@@ -955,7 +955,7 @@ class App:
              "on_change": self._on_map_tgt_change,
              "desc": "Offsets large map position while targeting an enemy{n}to move it out of the way."},
             {"label": "Pickup Radius",                 "buttons": 3,
-             "btn_tex": [127, 129, 133], "btn_text": [],
+             "btn_tex": [127, 133, 134], "btn_text": [],
              "init": self._init_pickup,
              "on_change": self._on_pickup_change,
              "desc": "Adjust item, experience, etc pickup range."},
@@ -1237,15 +1237,15 @@ class App:
         return pickup_map.get(label, 0)
 
     def _on_pickup_change(self, val):
-        labels = {0: "1x (Default)", 1: "2x", 2: "5x"}
-        upper_map = {0: 0x41a0, 1: 0x4220, 2: 0x42c8}
-        label = labels.get(val, "1x (Default)")
+        keys = list(addr.PICKUP_RADIUS_OPTIONS.keys())
+        vals = list(addr.PICKUP_RADIUS_OPTIONS.values())
+        if val >= len(keys):
+            val = 0
+        label = keys[val]
         self._pickup_var.set(label)
         settings.set("pickup_radius", label)
-        idx = list(addr.PICKUP_RADIUS_OPTIONS.keys()).index(label)
-        self.state.mem.write_byte(addr.OPTION_SAVE_PICKUP_RADIUS, idx)
-        upper16 = upper_map.get(val, 0x41a0)
-        instr = addr.pickup_radius_lui(upper16)
+        self.state.mem.write_byte(addr.OPTION_SAVE_PICKUP_RADIUS, val)
+        instr = addr.pickup_radius_lui(vals[val])
         try:
             self.state.mem.write_int(addr.PICKUP_RADIUS_INSTR, instr)
         except Exception:

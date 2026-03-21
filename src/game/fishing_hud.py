@@ -87,7 +87,7 @@ def _get_fish_medal_info(mem, loop_no):
     if direction == 0:
         return None
     size_raw = mem.read_short(room + 0x18)
-    return (size_raw / 100.0, direction)
+    return (size_raw, direction)
 
 
 _pond_cache = (None, [])
@@ -122,7 +122,7 @@ def write_fishing_hud(mem: Memory, loop_no):
         if medal:
             sz, d = medal
             op = ">=" if d > 0 else "<="
-            lines.append(f"Medal: {op} {sz:.0f}cm")
+            lines.append(f"Medal: {op} {sz}cm")
 
         # Pond fish list, one per line
         try:

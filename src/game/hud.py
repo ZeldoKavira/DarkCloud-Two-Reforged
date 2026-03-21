@@ -16,6 +16,14 @@ _PINE = 0x20000000
 _TREE_DNGMAP = 0x2037843C
 _BATTLE_SCENE = 0x203772A0
 
+
+def _get_bit_flag(mem, flag_no):
+    save = mem.read_int(_PINE + 0x00376FE4)  # ActiveSaveData ptr
+    if save == 0:
+        return False
+    word = mem.read_int(_PINE + save + (flag_no >> 5) * 4)
+    return (word >> (flag_no & 0x1F)) & 1 != 0
+
 _CONDITION_LABELS = {
     0: "Defeat all",
     1: "Attack with Max only",
@@ -35,10 +43,10 @@ _VIOLATION_MASK = {
     0: 0,
     1: 0x79,   # Max only: forbid Monica+Monster+Items+Ridepod
     2: 0x79,
-    3: 0x67,   # Monica only: forbid Ridepod+Melee+Max+Items+Monster
+    3: 0x67,   # Monica only: forbid Ridepod+Max+Items+Monster
     4: 0x5F,   # Monster only: forbid everything except 0x20
     5: 0x80,   # No healing
-    10: 0x7E,  # Ridepod only: forbid everything except 0x01
+    10: 0x5F,  # Ridepod only: forbid everything except 0x20 (Ridepod bit)
     11: 0x3F,  # Items only: forbid everything except 0x40
 }
 
@@ -150,11 +158,24 @@ def write_hud(mem, loop_no):
         _frozen_time = elapsed
     display_time = _frozen_time if _frozen_time is not None else elapsed
 
+    # Mimic count
+    tbm = mem.read_int(_PINE + 0x003772C4)
+    mimics = 0
+    if tbm != 0:
+        tbm = _PINE + tbm
+        for i in range(0x18):
+            off = i * 0x70
+            if mem.read_byte(tbm + off + 0x64) == 1 and (mem.read_int(tbm + off + 0x68) & 0x100):
+                mimics += 1
+
     lines = []
 
     # Kills
     k_mark = "* " if all_dead else "- "
-    lines.append(f"{k_mark}Kills: {session_kills}/{total}")
+    if mimics > 0:
+        lines.append(f"{k_mark}Kills: {session_kills}/{total} (+{mimics} mimic{'s' if mimics != 1 else ''})")
+    else:
+        lines.append(f"{k_mark}Kills: {session_kills}/{total}")
 
     # Time Attack
     m = "* " if medal_flags & _MEDAL_TIME else "- "
@@ -172,13 +193,26 @@ def write_hud(mem, loop_no):
     else:
         lines.append(f"{m}Time Attack: {e_m}:{e_s:02d}")
 
-    # Sphida
+    # Sphida — hide if not unlocked (bit flag 0x3b)
+    sphida_unlocked = _get_bit_flag(mem, 0x3b)
     m = "* " if medal_flags & _MEDAL_SPHIDA else "- "
-    lines.append(f"{m}Sphida")
+    if sphida_unlocked:
+        lines.append(f"{m}Sphida")
 
-    # Fishing
+    # Fishing — hide if not unlocked (bit flag 0x3c)
+    fishing_unlocked = _get_bit_flag(mem, 0x3c)
     m = "* " if medal_flags & _MEDAL_FISH else "- "
-    lines.append(f"{m}Fishing")
+    if fishing_unlocked:
+        fish_line = f"{m}Fishing"
+        if not (medal_flags & _MEDAL_FISH) and room:
+            fish_dir = mem.read_byte(room + 0x17)
+            if fish_dir > 127:
+                fish_dir -= 256
+            if fish_dir != 0:
+                fish_size = mem.read_short(room + 0x18)
+                op = ">=" if fish_dir > 0 else "<="
+                fish_line = f"{m}Fish {op} {fish_size}cm"
+        lines.append(fish_line)
 
     # Floor condition
     m = "* " if medal_flags & _MEDAL_CHALLENGE else "- "

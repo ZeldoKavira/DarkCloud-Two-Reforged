@@ -95,7 +95,7 @@ class ModManager:
                     # New game — stamp save and write defaults
                     self.mem.write_byte(addr.ENHANCED_MOD_SAVE_FLAG, 1)
                     self.mem.write_byte(addr.OPTION_SAVE_RUN_SPEED, 1)       # 1.5x
-                    self.mem.write_byte(addr.OPTION_SAVE_PICKUP_RADIUS, 1)   # 2x
+                    self.mem.write_byte(addr.OPTION_SAVE_PICKUP_RADIUS, 1)   # 5x
                     self.mem.write_byte(addr.OPTION_SAVE_MAP_POS_TARGET, 4)  # Center-Right
                     self.mem.write_byte(addr.OPTION_SAVE_AUTO_REPAIR, 1)     # on
                     self.mem.write_byte(addr.OPTION_SAVE_AUTO_KEY, 1)        # on
@@ -218,35 +218,51 @@ class ModManager:
         if not self.auto_repair:
             if getattr(self, '_repair_flag_set', False):
                 self.mem.write_int(addr.AUTO_REPAIR_FLAG, 0)
+                self.mem.write_int(addr.AUTO_REPAIR_FLAG_RANGED, 0)
+                self.mem.write_int(addr.AUTO_REPAIR_FLAG_ARMBAND, 0)
                 self._repair_flag_set = False
             return
 
         consumed = self.mem.read_int(addr.REPAIR_CONSUMED)
         if consumed != 0:
             self.mem.write_int(addr.REPAIR_CONSUMED, 0)
-            item_id = addr.REPAIR_POWDER_MELEE if consumed == 1 else addr.REPAIR_POWDER_RANGED
+            if consumed == 1:
+                item_id = addr.REPAIR_POWDER_MELEE
+                flag_addr = addr.AUTO_REPAIR_FLAG
+            elif consumed == 2:
+                item_id = addr.REPAIR_POWDER_RANGED
+                flag_addr = addr.AUTO_REPAIR_FLAG_RANGED
+            else:
+                item_id = addr.REPAIR_POWDER_ARMBAND
+                flag_addr = addr.AUTO_REPAIR_FLAG_ARMBAND
             cached = getattr(self, '_repair_slot_cache', {}).get(item_id)
             if cached is not None:
                 iid = self.mem.read_short(cached + 2)
                 count = self.mem.read_short(cached + 0x10)
                 if iid == item_id and count > 0:
                     self.mem.write_short(cached + 0x10, count - 1)
-                    log.info("Auto-used Repair Powder (%s)", "melee" if consumed == 1 else "ranged")
+                    log.info("Auto-used Repair Powder (0x%X)", item_id)
                     if count - 1 <= 0:
                         self._repair_needs_scan = True
                 else:
                     self._repair_needs_scan = True
             else:
                 self._repair_needs_scan = True
+            # Re-enable this type's flag
+            self.mem.write_int(flag_addr, 1)
 
         if getattr(self, '_repair_needs_scan', True):
             cache = {}
             melee_slot = self._find_item(addr.REPAIR_POWDER_MELEE)
             ranged_slot = self._find_item(addr.REPAIR_POWDER_RANGED)
+            armband_slot = self._find_item(addr.REPAIR_POWDER_ARMBAND)
             if melee_slot: cache[addr.REPAIR_POWDER_MELEE] = melee_slot
             if ranged_slot: cache[addr.REPAIR_POWDER_RANGED] = ranged_slot
+            if armband_slot: cache[addr.REPAIR_POWDER_ARMBAND] = armband_slot
             self._repair_slot_cache = cache
-            self.mem.write_int(addr.AUTO_REPAIR_FLAG, 1 if cache else 0)
+            self.mem.write_int(addr.AUTO_REPAIR_FLAG, 1 if melee_slot else 0)
+            self.mem.write_int(addr.AUTO_REPAIR_FLAG_RANGED, 1 if ranged_slot else 0)
+            self.mem.write_int(addr.AUTO_REPAIR_FLAG_ARMBAND, 1 if armband_slot else 0)
             self._repair_flag_set = bool(cache)
             self._repair_needs_scan = False
 
@@ -315,15 +331,17 @@ class ModManager:
                 self.dialog.show("You don't have the required key.", duration=3, mode=0)
 
     def _find_item(self, item_id):
-        """Find inventory slot address containing item_id, or None."""
-        base = addr.USER_DATA_MANAGER
-        for i in range(addr.INVENTORY_SLOT_COUNT):
-            slot = base + i * addr.INVENTORY_SLOT_SIZE
-            iid = self.mem.read_short(slot + 2)
-            if iid == item_id:
-                count = self.mem.read_short(slot + 0x10)
-                if count > 0:
-                    return slot
+        """Find inventory or equipped slot address containing item_id, or None."""
+        for base, count in [(addr.USER_DATA_MANAGER, addr.INVENTORY_SLOT_COUNT),
+                            (addr.EQUIP_SLOT_BASE, addr.EQUIP_SLOT_COUNT),
+                            (addr.EQUIP_SLOT_BASE_MON, addr.EQUIP_SLOT_COUNT)]:
+            for i in range(count):
+                slot = base + i * addr.INVENTORY_SLOT_SIZE
+                iid = self.mem.read_short(slot + 2)
+                if iid == item_id:
+                    c = self.mem.read_short(slot + 0x10)
+                    if c > 0:
+                        return slot
         return None
 
     def _consume_item(self, item_id):
