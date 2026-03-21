@@ -275,6 +275,14 @@ MSG_0x81B1_TEXT = 0x21E87EEE        # Text address for msg 0x81B1 (last entry, s
 
 # --- HUD overlay ---
 HUD_FLAG = 0x21F70040               # 1=draw HUD overlay (set by Python)
+
+# --- Fishing ---
+FISHING_LOOP_MODE = 0x203784D8      # 0=not fishing, 1=fishing active
+FISHING_CHARA_MODE = 0x203784D0     # 0=walk, 1=select cast, 2=casting, 3=waiting, 5=battle, 6=escaped, 7=caught
+FISHING_FISH_NUM = 0x20377134       # Number of fish in pond (int) — may be wrong
+FISHING_SUBGAME_INFO = 0x21F59E30   # SubGameInfo pointer (scene at [0])
+FISHING_FISH_CHARA = 0x20378494     # FishChara pointer (caught fish 3D model)
+FISHING_FISH_NAME_TBL = 0x2035D9B0  # Array of 18 pointers to fish name strings
 HUD_LINE_COUNT = 0x21F70044         # Number of lines to draw (max 6)
 
 # --- Auto repair powder ---

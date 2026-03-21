@@ -660,32 +660,40 @@ class App:
     }
 
     def _test_dialog(self):
-        """Convert all active chests on current floor to 2-choice boxes with their existing item + a bonus."""
+        """Scan scene struct for fish pointer arrays."""
         try:
             mem = self.state.mem
-            scene = mem.read_int(0x203772A0)
-            if scene == 0:
+            sgi = mem.read_int(0x21F59E30)
+            if not sgi:
                 return
-            tbm = mem.read_int(0x20000000 + scene + 0x7C)
-            if tbm == 0:
-                return
-            pine_tbm = 0x20000000 + tbm
-            count = 0
-            for i in range(0x18):
-                base = pine_tbm + i * 0x70
-                status = mem.read_byte(base + 0x64)
-                if status == 1:
-                    flags = mem.read_int(base + 0x68)
-                    if not (flags & 0x180):  # not already 2-box or mimic
-                        item1 = mem.read_short(base + 0x6C)
-                        # Set 2-box flag, keep existing item1, add Repair Powder as item2
-                        mem.write_int(base + 0x68, flags | 0x80)
-                        mem.write_short(base + 0x6E, 0x126)  # Repair Powder as 2nd choice
-                        mem.write_short(base + 0x72, 1)      # count for 2nd item
-                        count += 1
-            log.info("Converted %d chests to 2-choice boxes", count)
+            pine_scene = 0x20000000 + sgi
+            # The scene is a CScene. The fishing code gets a character via
+            # GetCharacter(scene, scene+0x2E50). Let's read that.
+            char_idx = mem.read_int(pine_scene + 0x2E50)
+            log.info("Scene=0x%08X char_idx=0x%08X", sgi, char_idx)
+            # Scan scene for arrays of 2+ consecutive valid pointers
+            for off in range(0, 0x3000, 4):
+                count = 0
+                for i in range(8):
+                    try:
+                        v = mem.read_int(pine_scene + off + i * 4)
+                        if 0x100000 < v < 0x2000000:
+                            count += 1
+                        else:
+                            break
+                    except:
+                        break
+                if count >= 2:
+                    # Read first pointer and check if it looks like a CAquaFish
+                    p0 = mem.read_int(pine_scene + off)
+                    pp = 0x20000000 + p0
+                    # CAquaFish has vtable as first field
+                    vt = mem.read_int(pp)
+                    log.info("  Scene+0x%04X: %d ptrs, first=0x%08X vt=0x%08X", off, count, p0, vt)
+                    if count >= 2:
+                        off += count * 4  # skip past this array
         except Exception as e:
-            log.error("2-box inject failed: %s", e)
+            log.error("Test failed: %s", e)
 
     def _on_answer(self, choice):
         self.dialog.show("You chose: " + ("Yes" if choice else "No"), duration=10, mode=0)
@@ -956,6 +964,16 @@ class App:
              "init": lambda: 0 if settings.get("dungeon_hud") is not False else 1,
              "on_change": self._on_dungeon_hud_change,
              "desc": "Show dungeon floor medal requirements and completion{n}status on screen."},
+            {"label": "Fishing HUD",                   "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if settings.get("fishing_hud") is not False else 1,
+             "on_change": self._on_fishing_hud_change,
+             "desc": "Show fish info, pond contents, and fishing status{n}while fishing."},
+            {"label": "Fast Bite",                     "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if settings.get("fast_bite") is not False else 1,
+             "on_change": self._on_fast_bite_change,
+             "desc": "Fish bite much faster when casting."},
             {"label": "Show Synth Points HUD",        "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if settings.get("synth_hud") is not False else 1,
@@ -1239,6 +1257,15 @@ class App:
         self.state.mem.write_byte(addr.OPTION_SAVE_DUNGEON_HUD, 0 if enabled else 1)
         if not enabled:
             self.state.mem.write_int(addr.HUD_FLAG, 0)
+
+    def _on_fishing_hud_change(self, val):
+        settings.set("fishing_hud", val == 0)
+
+    def _on_fast_bite_change(self, val):
+        enabled = val == 0
+        settings.set("fast_bite", enabled)
+        # Patch GetUkiWaitTime base wait: 0xF0 (240) vs 0x1E (30)
+        self.state.mem.write_int(0x20302D80, 0x2411001E if enabled else 0x241100F0)
 
     def _on_synth_hud_change(self, val):
         enabled = val == 0

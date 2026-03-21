@@ -8,6 +8,7 @@ from core import settings
 from game.game_state import GameState, GameSnapshot
 from game import addresses as addr
 from game.hud import write_hud
+from game.fishing_hud import write_fishing_hud
 
 log = logging.getLogger(__name__)
 
@@ -123,16 +124,22 @@ class ModManager:
                 self._hud_counter = hud_counter
                 if hud_counter % 50 == 0:
                     try:
-                        if settings.get("dungeon_hud") is not False:
-                            write_hud(self.mem, loop_no)
-                        else:
-                            self.mem.write_int(addr.HUD_FLAG, 0)
+                        # Fishing HUD takes priority when active
+                        fishing_active = False
+                        if settings.get("fishing_hud") is not False:
+                            fishing_active = write_fishing_hud(self.mem, loop_no)
+                        if not fishing_active:
+                            if settings.get("dungeon_hud") is not False:
+                                write_hud(self.mem, loop_no)
+                            else:
+                                self.mem.write_int(addr.HUD_FLAG, 0)
                     except Exception as e:
                         log.error("HUD error: %s", e)
-                    try:
-                        self._auto_key_tick()
-                    except Exception:
-                        pass
+                try:
+                    self._auto_key_tick()
+                except Exception:
+                    pass
+                if hud_counter % 50 == 0:
                     try:
                         self._start_floor_tick()
                     except Exception:
@@ -198,6 +205,10 @@ class ModManager:
         settings.set("synth_hud", synth_hud)
         gift_box = self.mem.read_byte(addr.OPTION_SAVE_GIFT_BOX) != 1
         settings.set("gift_box_hud", gift_box)
+
+        # Apply fast bite patch if enabled
+        if settings.get("fast_bite") is not False:
+            self.mem.write_int(0x20302D80, 0x2411001E)
 
         if self.on_options_loaded:
             self.on_options_loaded(speed_label, pickup_label, map_label, map_tgt_label, dng_speed_label)
