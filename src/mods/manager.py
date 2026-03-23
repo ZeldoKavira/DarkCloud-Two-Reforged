@@ -27,6 +27,8 @@ class ModManager:
         self.widescreen = False
         self.auto_repair = False
         self.auto_key = False
+        self.jp_prices = False
+        self._shop_patched = False
         self.on_options_loaded = None  # callback(speed_label, pickup_label, map_label, map_tgt_label)
         self.on_early_texture_patch = None  # callback to patch textures early
 
@@ -144,6 +146,10 @@ class ModManager:
                         self._start_floor_tick()
                     except Exception:
                         pass
+                    try:
+                        self._jp_price_tick()
+                    except Exception:
+                        pass
                 try:
                     self._auto_repair_tick()
                 except Exception:
@@ -197,6 +203,7 @@ class ModManager:
         # Load toggle options from save data
         self.auto_repair = self.mem.read_byte(addr.OPTION_SAVE_AUTO_REPAIR) == 1
         self.auto_key = self.mem.read_byte(addr.OPTION_SAVE_AUTO_KEY) == 1
+        self.jp_prices = self.mem.read_byte(addr.OPTION_SAVE_JP_PRICES) == 1
         dungeon_hud = self.mem.read_byte(addr.OPTION_SAVE_DUNGEON_HUD) != 1  # 0=on (default)
         synth_hud = self.mem.read_byte(addr.OPTION_SAVE_SYNTH_HUD) != 1
         settings.set("auto_repair", self.auto_repair)
@@ -209,6 +216,15 @@ class ModManager:
         # Apply fast bite patch if enabled
         if settings.get("fast_bite") is not False:
             self.mem.write_int(0x20302D80, 0x2411001E)
+
+        # Apply chest near enemy patch if enabled
+        if self.mem.read_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY) == 1:
+            self.mem.write_int(addr.CHEST_ENEMY_CHECK, 0x00000000)
+
+        # Apply fast pickup patch if enabled
+        if self.mem.read_byte(addr.OPTION_SAVE_FAST_PICKUP) != 1:
+            for a, fast, orig in addr.PICKUP_DELAY_PATCHES:
+                self.mem.write_int(a, fast)
 
         if self.on_options_loaded:
             self.on_options_loaded(speed_label, pickup_label, map_label, map_tgt_label, dng_speed_label)
@@ -301,6 +317,24 @@ class ModManager:
         grid = PINE + grid_ptr
         for i in range(w * h):
             self.mem.write_short(grid + i * 0x1C + 0x0C, 1)
+
+    def _jp_price_tick(self):
+        """Patch shop prices to JP values when shop is open."""
+        PINE = 0x20000000
+        shop = self.mem.read_int(addr.SHOP_PTR)
+        if shop == 0:
+            self._shop_patched = False
+            return
+        if not self.jp_prices or self._shop_patched:
+            return
+        for item_id, buy, sell in addr.JP_PRICE_PATCHES:
+            base = PINE + shop + addr.SHOP_PRICE_OFF + item_id * 8
+            if buy is not None:
+                self.mem.write_int(base, buy)
+            if sell is not None:
+                self.mem.write_int(base + 4, sell)
+        self._shop_patched = True
+        log.info("Applied JP price patches")
 
     def _auto_key_tick(self):
         """Auto-use dungeon key on gate when player presses X."""

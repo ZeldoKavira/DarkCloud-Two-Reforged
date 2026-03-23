@@ -938,7 +938,7 @@ class App:
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if self.manager.auto_repair else 1,
              "on_change": self._on_auto_repair_change,
-             "desc": "Automatically uses Repair Powder when weapons break{n}if the appropriate repair powder is available."},
+             "desc": "Auto-Uses Repair Powder when weapons break{n}if the appropriate repair powder is available."},
             {"label": "Auto Insert Dungeon Keys",      "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if self.manager.auto_key else 1,
@@ -959,6 +959,11 @@ class App:
              "init": self._init_pickup,
              "on_change": self._on_pickup_change,
              "desc": "Adjust item, experience, etc pickup range."},
+            {"label": "Fast Pickup",                   "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_FAST_PICKUP) != 1 else 1,
+             "on_change": self._on_fast_pickup_change,
+             "desc": "Items become pickupable almost instantly after{n}dropping instead of the normal delay."},
             {"label": "Show Medal HUD",                 "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if settings.get("dungeon_hud") is not False else 1,
@@ -994,6 +999,21 @@ class App:
              "init": lambda: 0 if settings.get("gift_box_hud") is not False else 1,
              "on_change": self._on_gift_box_change,
              "desc": "Show item names in clown chest boxes and guarantee{n}you receive the item you select."},
+            {"label": "Open Chests Near Enemies",     "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY) == 1 else 1,
+             "on_change": self._on_chest_enemy_change,
+             "desc": "Allow opening treasure chests when enemies{n}are nearby."},
+            {"label": "JP Prices",                     "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.manager.jp_prices else 1,
+             "on_change": self._on_jp_prices_change,
+             "desc": "Use Japanese version prices.{n}Name-Change Ticket: 10 medals. Improved Bomb sell: 500."},
+            {"label": "Debug Menu",                    "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.state.mem.read_int(0x20376FB8) == 1 else 1,
+             "on_change": self._on_debug_menu_change,
+             "desc": "Enable the game's built-in debug menu."},
         ]
         num_rows = len(self._custom_rows)
         total_new_parts = sum(r["buttons"] for r in self._custom_rows)
@@ -1251,6 +1271,12 @@ class App:
         except Exception:
             pass
 
+    def _on_fast_pickup_change(self, val):
+        enabled = val == 0
+        self.state.mem.write_byte(addr.OPTION_SAVE_FAST_PICKUP, 0 if enabled else 1)
+        for a, fast, orig in addr.PICKUP_DELAY_PATCHES:
+            self.state.mem.write_int(a, fast if enabled else orig)
+
     def _on_dungeon_hud_change(self, val):
         enabled = val == 0
         settings.set("dungeon_hud", enabled)
@@ -1288,6 +1314,21 @@ class App:
         settings.set("gift_box_hud", enabled)
         self._gift_box_var.set(enabled)
         self.state.mem.write_byte(addr.OPTION_SAVE_GIFT_BOX, 0 if enabled else 1)
+
+    def _on_debug_menu_change(self, val):
+        self.state.mem.write_int(0x20376FB8, 1 if val == 0 else 0)
+
+    def _on_jp_prices_change(self, val):
+        enabled = val == 0
+        self.manager.jp_prices = enabled
+        self.manager._shop_patched = False
+        self.state.mem.write_byte(addr.OPTION_SAVE_JP_PRICES, 1 if enabled else 0)
+
+    def _on_chest_enemy_change(self, val):
+        enabled = val == 0
+        self.state.mem.write_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY, 1 if enabled else 0)
+        self.state.mem.write_int(addr.CHEST_ENEMY_CHECK,
+                                 0x00000000 if enabled else addr.CHEST_ENEMY_CHECK_ORIG)
 
     def _inject_btn_textures(self, cave, btn_templates):
         """Write custom button texture patch and create TexGetInfo entries."""

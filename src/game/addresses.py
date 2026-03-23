@@ -120,7 +120,10 @@ OPTION_SAVE_SYNTH_HUD = _MOD_SAVE_BASE + 0x0A      # 0=enabled (default), 1=disa
 OPTION_SAVE_START_MAP = _MOD_SAVE_BASE + 0x0B       # 1=start with map
 OPTION_SAVE_START_CRYSTAL = _MOD_SAVE_BASE + 0x0C   # 1=start with crystal
 OPTION_SAVE_GIFT_BOX = _MOD_SAVE_BASE + 0x0D        # 0=enabled (default), 1=disabled
-# Reserve _MOD_SAVE_BASE + 0x0D through +0xFF for future mod options
+OPTION_SAVE_JP_PRICES = _MOD_SAVE_BASE + 0x0E       # 1=enabled (JP prices)
+OPTION_SAVE_FAST_PICKUP = _MOD_SAVE_BASE + 0x0F     # 0=enabled (default), 1=disabled
+OPTION_SAVE_CHEST_NEAR_ENEMY = _MOD_SAVE_BASE + 0x10  # 1=enabled (allow chest near enemy)
+# Reserve _MOD_SAVE_BASE + 0x11 through +0xFF for future mod options
 
 # --- Title screen ---
 TITLE_INFO_PTR = 0x20377E6C         # Pointer to TitleInfo struct
@@ -228,6 +231,16 @@ def pickup_radius_lui(upper16):
     """Build the full lui v1, imm instruction word."""
     return 0x3C030000 | upper16
 
+# --- Pickup delay ---
+# IsGet__9CPullItemFPf has two gates before allowing pickup:
+#   1) +0x50 != 0 (item has landed) — beq at 0x001b90ec skips if not landed
+#   2) +0x52 <= 0 (timer expired) — b at 0x001b9100 skips if timer > 0
+# NOP both to allow pickup while still bouncing.
+PICKUP_DELAY_PATCHES = [
+    (0x201b90ec, 0x00000000, 0x2A006010),  # beq v1,zero,return → nop
+    (0x201b9100, 0x00000000, 0x26000010),  # b return → nop
+]
+
 # --- Large map position ---
 # Mode 2 (large map) X/Y are set by `li` instructions before Draw__14CMiniMapSymbolFPf.
 # Three call sites write these values every frame. We patch the `li` immediate.
@@ -328,6 +341,21 @@ GAME_DATA = 0x21E69570              # CGameData instance
 GAME_DATA_BASE_PTR = 0x21E69574     # CGameData+4: pointer to item common data array
 ITEM_CONVERT_TABLE = 0x21E71B70     # local_itemdatano_converttable: short[0x200]
 # CommonData entry: index * 44 bytes, +0x28 = pointer to name string
+
+# --- Shop ---
+SHOP_PTR = 0x20377D30               # CShopPtr (gp-0x67C0)
+# Price table at CShop + 0x20C + item_id*8 (buy), +0x210 + item_id*8 (sell)
+SHOP_PRICE_OFF = 0x20C
+# JP price overrides: (item_id, buy_or_None, sell_or_None)
+JP_PRICE_PATCHES = [
+    (0x180, 10, None),    # Name-Change Ticket: 40→10 medals buy
+    (0x186, None, 500),   # Improved Bomb: 150→500 gilda sell
+]
+
+# --- Chest near enemy ---
+# bne s2, zero at 0x001D3774 blocks chest open when enemy < 200 units
+CHEST_ENEMY_CHECK = 0x201D3774
+CHEST_ENEMY_CHECK_ORIG = 0x16400008  # bne s2, zero, +8
 
 # Gift box (clown chest) — script variable pointer for item forcing
 GIFT_BOX_SCRIPT_VARS = 0x21ECE3E0   # pointer to event script local vars
