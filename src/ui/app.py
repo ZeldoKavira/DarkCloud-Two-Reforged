@@ -984,16 +984,6 @@ class App:
              "init": lambda: 0 if settings.get("synth_hud") is not False else 1,
              "on_change": self._on_synth_hud_change,
              "desc": "Show pending synthesis points on weapon icons."},
-            {"label": "Start With Map",                "buttons": 2,
-             "btn_tex": [0, 1], "btn_text": [],
-             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_START_MAP) == 1 else 1,
-             "on_change": self._on_start_map_change,
-             "desc": "Automatically reveal the dungeon map on each floor."},
-            {"label": "Start With Crystal",            "buttons": 2,
-             "btn_tex": [0, 1], "btn_text": [],
-             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_START_CRYSTAL) == 1 else 1,
-             "on_change": self._on_start_crystal_change,
-             "desc": "Automatically place the magic crystal on each floor."},
             {"label": "Show Gift Box Items",           "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if settings.get("gift_box_hud") is not False else 1,
@@ -1001,17 +991,32 @@ class App:
              "desc": "Show item names in clown chest boxes and guarantee{n}you receive the item you select."},
             {"label": "Open Chests Near Enemies",     "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
-             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY) == 1 else 1,
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY) != 1 else 1,
              "on_change": self._on_chest_enemy_change,
              "desc": "Allow opening treasure chests when enemies{n}are nearby."},
-            {"label": "JP Prices",                     "buttons": 2,
+            {"label": "Fish Near Enemies",             "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
-             "init": lambda: 0 if self.manager.jp_prices else 1,
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_FISH_NEAR_ENEMY) != 1 else 1,
+             "on_change": self._on_fish_enemy_change,
+             "desc": "Allow equipping the fishing rod when enemies{n}are alive in a dungeon."},
+            {"label": "Start With Map",                "buttons": 2,
+             "btn_tex": [1, 0], "btn_text": [],
+             "init": lambda: 1 if self.state.mem.read_byte(addr.OPTION_SAVE_START_MAP) == 1 else 0,
+             "on_change": self._on_start_map_change,
+             "desc": "Automatically reveal the dungeon map on each floor."},
+            {"label": "Start With Crystal",            "buttons": 2,
+             "btn_tex": [1, 0], "btn_text": [],
+             "init": lambda: 1 if self.state.mem.read_byte(addr.OPTION_SAVE_START_CRYSTAL) == 1 else 0,
+             "on_change": self._on_start_crystal_change,
+             "desc": "Automatically place the magic crystal on each floor."},
+            {"label": "JP Prices",                     "buttons": 2,
+             "btn_tex": [1, 0], "btn_text": [],
+             "init": lambda: 1 if self.manager.jp_prices else 0,
              "on_change": self._on_jp_prices_change,
              "desc": "Use Japanese version prices.{n}Name-Change Ticket: 10 medals. Improved Bomb sell: 500."},
             {"label": "Debug Menu",                    "buttons": 2,
-             "btn_tex": [0, 1], "btn_text": [],
-             "init": lambda: 0 if self.state.mem.read_int(0x20376FB8) == 1 else 1,
+             "btn_tex": [1, 0], "btn_text": [],
+             "init": lambda: 1 if self.state.mem.read_int(0x20376FB8) == 1 else 0,
              "on_change": self._on_debug_menu_change,
              "desc": "Enable the game's built-in debug menu."},
         ]
@@ -1300,12 +1305,12 @@ class App:
         self.state.mem.write_byte(addr.OPTION_SAVE_SYNTH_HUD, 0 if enabled else 1)
 
     def _on_start_map_change(self, val):
-        enabled = val == 0
+        enabled = val == 1
         self.state.mem.write_byte(addr.OPTION_SAVE_START_MAP, 1 if enabled else 0)
         self._start_map_var.set(enabled)
 
     def _on_start_crystal_change(self, val):
-        enabled = val == 0
+        enabled = val == 1
         self.state.mem.write_byte(addr.OPTION_SAVE_START_CRYSTAL, 1 if enabled else 0)
         self._start_crystal_var.set(enabled)
 
@@ -1316,19 +1321,25 @@ class App:
         self.state.mem.write_byte(addr.OPTION_SAVE_GIFT_BOX, 0 if enabled else 1)
 
     def _on_debug_menu_change(self, val):
-        self.state.mem.write_int(0x20376FB8, 1 if val == 0 else 0)
+        self.state.mem.write_int(0x20376FB8, 1 if val == 1 else 0)
 
     def _on_jp_prices_change(self, val):
-        enabled = val == 0
+        enabled = val == 1
         self.manager.jp_prices = enabled
         self.manager._shop_patched = False
         self.state.mem.write_byte(addr.OPTION_SAVE_JP_PRICES, 1 if enabled else 0)
 
     def _on_chest_enemy_change(self, val):
         enabled = val == 0
-        self.state.mem.write_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY, 1 if enabled else 0)
+        self.state.mem.write_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY, 0 if enabled else 1)
         self.state.mem.write_int(addr.CHEST_ENEMY_CHECK,
                                  0x00000000 if enabled else addr.CHEST_ENEMY_CHECK_ORIG)
+
+    def _on_fish_enemy_change(self, val):
+        enabled = val == 0
+        self.state.mem.write_byte(addr.OPTION_SAVE_FISH_NEAR_ENEMY, 0 if enabled else 1)
+        self.state.mem.write_int(addr.FISH_ENEMY_CHECK,
+                                 0x00000000 if enabled else addr.FISH_ENEMY_CHECK_ORIG)
 
     def _inject_btn_textures(self, cave, btn_templates):
         """Write custom button texture patch and create TexGetInfo entries."""
