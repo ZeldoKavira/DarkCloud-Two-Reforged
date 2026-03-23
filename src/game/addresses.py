@@ -122,8 +122,9 @@ OPTION_SAVE_START_CRYSTAL = _MOD_SAVE_BASE + 0x0C   # 1=start with crystal
 OPTION_SAVE_GIFT_BOX = _MOD_SAVE_BASE + 0x0D        # 0=enabled (default), 1=disabled
 OPTION_SAVE_JP_PRICES = _MOD_SAVE_BASE + 0x0E       # 1=enabled (JP prices)
 OPTION_SAVE_FAST_PICKUP = _MOD_SAVE_BASE + 0x0F     # 0=enabled (default), 1=disabled
-OPTION_SAVE_CHEST_NEAR_ENEMY = _MOD_SAVE_BASE + 0x10  # 1=enabled (allow chest near enemy)
-# Reserve _MOD_SAVE_BASE + 0x11 through +0xFF for future mod options
+OPTION_SAVE_CHEST_NEAR_ENEMY = _MOD_SAVE_BASE + 0x10  # 0=enabled (default), 1=disabled
+OPTION_SAVE_FISH_NEAR_ENEMY = _MOD_SAVE_BASE + 0x11   # 0=enabled (default), 1=disabled
+# Reserve _MOD_SAVE_BASE + 0x12 through +0xFF for future mod options
 
 # --- Title screen ---
 TITLE_INFO_PTR = 0x20377E6C         # Pointer to TitleInfo struct
@@ -356,6 +357,11 @@ JP_PRICE_PATCHES = [
 # bne s2, zero at 0x001D3774 blocks chest open when enemy < 200 units
 CHEST_ENEMY_CHECK = 0x201D3774
 CHEST_ENEMY_CHECK_ORIG = 0x16400008  # bne s2, zero, +8
+
+# --- Fish near enemy ---
+# move s0, zero at 0x0023A59C blocks fishing when enemies alive in dungeon
+FISH_ENEMY_CHECK = 0x2023A59C
+FISH_ENEMY_CHECK_ORIG = 0x0000802D  # move s0, zero (daddu s0, zero, zero)
 
 # Gift box (clown chest) — script variable pointer for item forcing
 GIFT_BOX_SCRIPT_VARS = 0x21ECE3E0   # pointer to event script local vars

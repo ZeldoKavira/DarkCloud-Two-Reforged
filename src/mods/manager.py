@@ -217,9 +217,13 @@ class ModManager:
         if settings.get("fast_bite") is not False:
             self.mem.write_int(0x20302D80, 0x2411001E)
 
-        # Apply chest near enemy patch if enabled
-        if self.mem.read_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY) == 1:
+        # Apply chest near enemy patch if enabled (default on = byte 0)
+        if self.mem.read_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY) != 1:
             self.mem.write_int(addr.CHEST_ENEMY_CHECK, 0x00000000)
+
+        # Apply fish near enemy patch if enabled (default on = byte 0)
+        if self.mem.read_byte(addr.OPTION_SAVE_FISH_NEAR_ENEMY) != 1:
+            self.mem.write_int(addr.FISH_ENEMY_CHECK, 0x00000000)
 
         # Apply fast pickup patch if enabled
         if self.mem.read_byte(addr.OPTION_SAVE_FAST_PICKUP) != 1:
