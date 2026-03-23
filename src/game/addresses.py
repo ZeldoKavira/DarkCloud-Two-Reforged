@@ -124,7 +124,8 @@ OPTION_SAVE_JP_PRICES = _MOD_SAVE_BASE + 0x0E       # 1=enabled (JP prices)
 OPTION_SAVE_FAST_PICKUP = _MOD_SAVE_BASE + 0x0F     # 0=enabled (default), 1=disabled
 OPTION_SAVE_CHEST_NEAR_ENEMY = _MOD_SAVE_BASE + 0x10  # 0=enabled (default), 1=disabled
 OPTION_SAVE_FISH_NEAR_ENEMY = _MOD_SAVE_BASE + 0x11   # 0=enabled (default), 1=disabled
-# Reserve _MOD_SAVE_BASE + 0x12 through +0xFF for future mod options
+OPTION_SAVE_AUTO_SKIP_EVENT = _MOD_SAVE_BASE + 0x12   # 0=enabled (default), 1=disabled
+# Reserve _MOD_SAVE_BASE + 0x13 through +0xFF for future mod options
 
 # --- Title screen ---
 TITLE_INFO_PTR = 0x20377E6C         # Pointer to TitleInfo struct
@@ -241,6 +242,9 @@ PICKUP_DELAY_PATCHES = [
     (0x201b90ec, 0x00000000, 0x2A006010),  # beq v1,zero,return → nop
     (0x201b9100, 0x00000000, 0x26000010),  # b return → nop
 ]
+
+# --- Event skip ---
+EVENT_SKIP_FLAG = 0x21ece504        # 0=none, 1=playing, 2=fading, 3=skipping
 
 # --- Large map position ---
 # Mode 2 (large map) X/Y are set by `li` instructions before Draw__14CMiniMapSymbolFPf.

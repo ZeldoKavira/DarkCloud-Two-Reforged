@@ -55,6 +55,7 @@ _start_kills = None
 _last_floor_ptr = None
 _frozen_time = None
 _last_start_time = None
+_entry_medal_flags = 0
 
 
 def _get_floor_info(mem):
@@ -81,12 +82,13 @@ def _get_floor_info(mem):
 
 
 def write_hud(mem, loop_no):
-    global _start_kills, _last_floor_ptr, _frozen_time
+    global _start_kills, _last_floor_ptr, _frozen_time, _entry_medal_flags
 
     if loop_no not in (addr.Mode.DUNGEON, addr.Mode.TOWN):
         mem.write_int(addr.HUD_FLAG, 0)
         _clear_synth(mem)
         _last_floor_ptr = None
+        _entry_medal_flags = 0
         return
 
     ptr = mem.read_int(addr.NOW_FLOOR_INFO_PTR)
@@ -104,6 +106,7 @@ def write_hud(mem, loop_no):
         _start_kills = kill_count
         _last_floor_ptr = ptr
         _frozen_time = None
+        _entry_medal_flags = medal_flags
 
     session_kills = kill_count - _start_kills
 
@@ -179,49 +182,61 @@ def write_hud(mem, loop_no):
 
     # Time Attack
     m = "* " if medal_flags & _MEDAL_TIME else "- "
-    e_sec = display_time // 60
-    e_m, e_s = divmod(e_sec, 60)
-    if time_limit > 0:
-        tl_sec = time_limit // 60
-        tl_m, tl_s = divmod(tl_sec, 60)
-        if all_dead and e_sec <= tl_sec:
-            lines.append(f"{m}Time Attack: {e_m}:{e_s:02d} / {tl_m}:{tl_s:02d} CLEAR")
-        elif not all_dead and e_sec > tl_sec:
-            lines.append(f"{m}Time Attack: {e_m}:{e_s:02d} / {tl_m}:{tl_s:02d} FAILED")
-        else:
-            lines.append(f"{m}Time Attack: {e_m}:{e_s:02d} / {tl_m}:{tl_s:02d}")
+    if _entry_medal_flags & _MEDAL_TIME:
+        lines.append(f"* Time Attack")
     else:
-        lines.append(f"{m}Time Attack: {e_m}:{e_s:02d}")
+        e_sec = display_time // 60
+        e_m, e_s = divmod(e_sec, 60)
+        if time_limit > 0:
+            tl_sec = time_limit // 60
+            tl_m, tl_s = divmod(tl_sec, 60)
+            if all_dead and e_sec <= tl_sec:
+                lines.append(f"{m}Time Attack: {e_m}:{e_s:02d} / {tl_m}:{tl_s:02d} CLEAR")
+            elif not all_dead and e_sec > tl_sec:
+                lines.append(f"{m}Time Attack: {e_m}:{e_s:02d} / {tl_m}:{tl_s:02d} FAILED")
+            else:
+                lines.append(f"{m}Time Attack: {e_m}:{e_s:02d} / {tl_m}:{tl_s:02d}")
+        else:
+            lines.append(f"{m}Time Attack: {e_m}:{e_s:02d}")
 
     # Sphida — hide if not unlocked (bit flag 0x3b)
     sphida_unlocked = _get_bit_flag(mem, 0x3b)
-    m = "* " if medal_flags & _MEDAL_SPHIDA else "- "
     if sphida_unlocked:
-        lines.append(f"{m}Sphida")
+        if _entry_medal_flags & _MEDAL_SPHIDA:
+            lines.append("* Sphida")
+        else:
+            m = "* " if medal_flags & _MEDAL_SPHIDA else "- "
+            lines.append(f"{m}Sphida")
 
     # Fishing — hide if not unlocked (bit flag 0x3c)
     fishing_unlocked = _get_bit_flag(mem, 0x3c)
-    m = "* " if medal_flags & _MEDAL_FISH else "- "
     if fishing_unlocked:
-        fish_line = f"{m}Fishing"
-        if not (medal_flags & _MEDAL_FISH) and room:
-            fish_dir = mem.read_byte(room + 0x17)
-            if fish_dir > 127:
-                fish_dir -= 256
-            if fish_dir != 0:
-                fish_size = mem.read_short(room + 0x18)
-                op = ">=" if fish_dir > 0 else "<="
-                fish_line = f"{m}Fish {op} {fish_size}cm"
-        lines.append(fish_line)
+        if _entry_medal_flags & _MEDAL_FISH:
+            lines.append("* Fishing")
+        else:
+            m = "* " if medal_flags & _MEDAL_FISH else "- "
+            fish_line = f"{m}Fishing"
+            if not (medal_flags & _MEDAL_FISH) and room:
+                fish_dir = mem.read_byte(room + 0x17)
+                if fish_dir > 127:
+                    fish_dir -= 256
+                if fish_dir != 0:
+                    fish_size = mem.read_short(room + 0x18)
+                    op = ">=" if fish_dir > 0 else "<="
+                    fish_line = f"{m}Fish {op} {fish_size}cm"
+            lines.append(fish_line)
 
     # Floor condition
-    m = "* " if medal_flags & _MEDAL_CHALLENGE else "- "
-    mask = _VIOLATION_MASK.get(cond_type_id if cond_type_id >= 0 else -1, 0)
-    violated = mask != 0 and (usage & mask) != 0
-    if violated:
-        lines.append(f"{m}{cond_label} FAILED")
+    if _entry_medal_flags & _MEDAL_CHALLENGE:
+        lines.append(f"* {cond_label}")
     else:
-        lines.append(f"{m}{cond_label}")
+        m = "* " if medal_flags & _MEDAL_CHALLENGE else "- "
+        mask = _VIOLATION_MASK.get(cond_type_id if cond_type_id >= 0 else -1, 0)
+        violated = mask != 0 and (usage & mask) != 0
+        if violated:
+            lines.append(f"{m}{cond_label} FAILED")
+        else:
+            lines.append(f"{m}{cond_label}")
 
     _write_lines(mem, lines)
     if settings.get("synth_hud") is not False:

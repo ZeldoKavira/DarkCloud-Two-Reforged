@@ -964,6 +964,11 @@ class App:
              "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_FAST_PICKUP) != 1 else 1,
              "on_change": self._on_fast_pickup_change,
              "desc": "Items become pickupable almost instantly after{n}dropping instead of the normal delay."},
+            {"label": "Auto Skip Cutscenes",           "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_AUTO_SKIP_EVENT) != 1 else 1,
+             "on_change": self._on_auto_skip_event_change,
+             "desc": "Automatically skip dungeon floor entry cutscenes."},
             {"label": "Show Medal HUD",                 "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if settings.get("dungeon_hud") is not False else 1,
@@ -1281,6 +1286,9 @@ class App:
         self.state.mem.write_byte(addr.OPTION_SAVE_FAST_PICKUP, 0 if enabled else 1)
         for a, fast, orig in addr.PICKUP_DELAY_PATCHES:
             self.state.mem.write_int(a, fast if enabled else orig)
+
+    def _on_auto_skip_event_change(self, val):
+        self.state.mem.write_byte(addr.OPTION_SAVE_AUTO_SKIP_EVENT, 0 if val == 0 else 1)
 
     def _on_dungeon_hud_change(self, val):
         enabled = val == 0

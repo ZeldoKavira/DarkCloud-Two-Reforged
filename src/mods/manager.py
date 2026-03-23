@@ -154,6 +154,13 @@ class ModManager:
                     self._auto_repair_tick()
                 except Exception:
                     pass
+                # Auto-skip dungeon entry cutscenes
+                if self.mem.read_byte(addr.OPTION_SAVE_AUTO_SKIP_EVENT) != 1:
+                    try:
+                        if self.mem.read_int(addr.EVENT_SKIP_FLAG) == 1:
+                            self.mem.write_int(addr.EVENT_SKIP_FLAG, 3)
+                    except Exception:
+                        pass
                 if hud_counter % 30 == 0:
                     try:
                         from game.hud import write_gift_box_hud
