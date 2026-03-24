@@ -964,11 +964,16 @@ class App:
              "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_FAST_PICKUP) != 1 else 1,
              "on_change": self._on_fast_pickup_change,
              "desc": "Items become pickupable almost instantly after{n}dropping instead of the normal delay."},
-            {"label": "Auto Skip Cutscenes",           "buttons": 2,
+            {"label": "Skip Dung Entry Cutscenes",     "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_AUTO_SKIP_EVENT) != 1 else 1,
              "on_change": self._on_auto_skip_event_change,
-             "desc": "Automatically skip dungeon floor entry cutscenes."},
+             "desc": "Automatically skip the dungeon floor entry cutscene."},
+            {"label": "Skip All Cutscenes",            "buttons": 2,
+             "btn_tex": [1, 0], "btn_text": [],
+             "init": lambda: 1 if self.state.mem.read_byte(addr.OPTION_SAVE_SKIP_ALL_EVENTS) == 1 else 0,
+             "on_change": self._on_skip_all_events_change,
+             "desc": "Automatically skip all in-game cutscenes and events."},
             {"label": "Show Medal HUD",                 "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if settings.get("dungeon_hud") is not False else 1,
@@ -999,11 +1004,6 @@ class App:
              "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY) != 1 else 1,
              "on_change": self._on_chest_enemy_change,
              "desc": "Allow opening treasure chests when enemies{n}are nearby."},
-            {"label": "Fish Near Enemies",             "buttons": 2,
-             "btn_tex": [0, 1], "btn_text": [],
-             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_FISH_NEAR_ENEMY) != 1 else 1,
-             "on_change": self._on_fish_enemy_change,
-             "desc": "Allow equipping the fishing rod when enemies{n}are alive in a dungeon."},
             {"label": "Start With Map",                "buttons": 2,
              "btn_tex": [1, 0], "btn_text": [],
              "init": lambda: 1 if self.state.mem.read_byte(addr.OPTION_SAVE_START_MAP) == 1 else 0,
@@ -1290,6 +1290,9 @@ class App:
     def _on_auto_skip_event_change(self, val):
         self.state.mem.write_byte(addr.OPTION_SAVE_AUTO_SKIP_EVENT, 0 if val == 0 else 1)
 
+    def _on_skip_all_events_change(self, val):
+        self.state.mem.write_byte(addr.OPTION_SAVE_SKIP_ALL_EVENTS, 1 if val == 0 else 0)
+
     def _on_dungeon_hud_change(self, val):
         enabled = val == 0
         settings.set("dungeon_hud", enabled)
@@ -1342,12 +1345,6 @@ class App:
         self.state.mem.write_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY, 0 if enabled else 1)
         self.state.mem.write_int(addr.CHEST_ENEMY_CHECK,
                                  0x00000000 if enabled else addr.CHEST_ENEMY_CHECK_ORIG)
-
-    def _on_fish_enemy_change(self, val):
-        enabled = val == 0
-        self.state.mem.write_byte(addr.OPTION_SAVE_FISH_NEAR_ENEMY, 0 if enabled else 1)
-        self.state.mem.write_int(addr.FISH_ENEMY_CHECK,
-                                 0x00000000 if enabled else addr.FISH_ENEMY_CHECK_ORIG)
 
     def _inject_btn_textures(self, cave, btn_templates):
         """Write custom button texture patch and create TexGetInfo entries."""

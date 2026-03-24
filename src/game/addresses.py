@@ -125,7 +125,8 @@ OPTION_SAVE_FAST_PICKUP = _MOD_SAVE_BASE + 0x0F     # 0=enabled (default), 1=dis
 OPTION_SAVE_CHEST_NEAR_ENEMY = _MOD_SAVE_BASE + 0x10  # 0=enabled (default), 1=disabled
 OPTION_SAVE_FISH_NEAR_ENEMY = _MOD_SAVE_BASE + 0x11   # 0=enabled (default), 1=disabled
 OPTION_SAVE_AUTO_SKIP_EVENT = _MOD_SAVE_BASE + 0x12   # 0=enabled (default), 1=disabled
-# Reserve _MOD_SAVE_BASE + 0x13 through +0xFF for future mod options
+OPTION_SAVE_SKIP_ALL_EVENTS = _MOD_SAVE_BASE + 0x13   # 1=enabled, 0=disabled (default)
+# Reserve _MOD_SAVE_BASE + 0x14 through +0xFF for future mod options
 
 # --- Title screen ---
 TITLE_INFO_PTR = 0x20377E6C         # Pointer to TitleInfo struct

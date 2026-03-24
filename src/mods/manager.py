@@ -124,9 +124,28 @@ class ModManager:
             if self._ingame:
                 hud_counter = getattr(self, '_hud_counter', 0) + 1
                 self._hud_counter = hud_counter
+                if hud_counter % 5 == 0:
+                    try:
+                        self._auto_key_tick()
+                    except Exception:
+                        pass
+                    try:
+                        self._auto_repair_tick()
+                    except Exception:
+                        pass
+                    # Auto-skip cutscenes
+                    try:
+                        ev = self.mem.read_int(addr.EVENT_SKIP_FLAG)
+                        if ev == 1:
+                            skip_all = self.mem.read_byte(addr.OPTION_SAVE_SKIP_ALL_EVENTS) == 1
+                            skip_entry = self.mem.read_byte(addr.OPTION_SAVE_AUTO_SKIP_EVENT) != 1
+                            if skip_all or (skip_entry and getattr(self, '_pending_floor_skip', False)):
+                                self.mem.write_int(addr.EVENT_SKIP_FLAG, 3)
+                                self._pending_floor_skip = False
+                    except Exception:
+                        pass
                 if hud_counter % 50 == 0:
                     try:
-                        # Fishing HUD takes priority when active
                         fishing_active = False
                         if settings.get("fishing_hud") is not False:
                             fishing_active = write_fishing_hud(self.mem, loop_no)
@@ -137,28 +156,12 @@ class ModManager:
                                 self.mem.write_int(addr.HUD_FLAG, 0)
                     except Exception as e:
                         log.error("HUD error: %s", e)
-                try:
-                    self._auto_key_tick()
-                except Exception:
-                    pass
-                if hud_counter % 50 == 0:
                     try:
                         self._start_floor_tick()
                     except Exception:
                         pass
                     try:
                         self._jp_price_tick()
-                    except Exception:
-                        pass
-                try:
-                    self._auto_repair_tick()
-                except Exception:
-                    pass
-                # Auto-skip dungeon entry cutscenes
-                if self.mem.read_byte(addr.OPTION_SAVE_AUTO_SKIP_EVENT) != 1:
-                    try:
-                        if self.mem.read_int(addr.EVENT_SKIP_FLAG) == 1:
-                            self.mem.write_int(addr.EVENT_SKIP_FLAG, 3)
                     except Exception:
                         pass
                 if hud_counter % 30 == 0:
@@ -168,7 +171,7 @@ class ModManager:
                     except Exception:
                         pass
 
-            time.sleep(0.001)
+            time.sleep(0.016)
 
         self.mem.write_int(addr.MOD_FLAG, 0)
 
@@ -302,6 +305,7 @@ class ModManager:
         if ptr == getattr(self, '_last_floor_ptr_sf', None):
             return
         self._last_floor_ptr_sf = ptr
+        self._pending_floor_skip = True
         PINE = 0x20000000
         log.info("New floor detected (ptr=0x%X)", ptr)
         scene_ptr = self.mem.read_int(0x2037729C)  # DngMainScene
@@ -346,6 +350,7 @@ class ModManager:
                 self.mem.write_int(base + 4, sell)
         self._shop_patched = True
         log.info("Applied JP price patches")
+
 
     def _auto_key_tick(self):
         """Auto-use dungeon key on gate when player presses X."""
@@ -397,6 +402,8 @@ class ModManager:
         count = self.mem.read_short(slot + 0x10)
         if count <= 1:
             self.mem.write_short(slot + 0x10, 0)
+            self.mem.write_short(slot + 0x00, 0)  # clear exists flag
+            self.mem.write_short(slot + 0x02, 0)  # clear item ID
         else:
             self.mem.write_short(slot + 0x10, count - 1)
         return True
