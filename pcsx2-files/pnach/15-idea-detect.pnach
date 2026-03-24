@@ -1,0 +1,137 @@
+// Idea Detection — detect what the camera viewfinder is pointing at
+//
+// Flags (written by cave, read by Python):
+//   0x01F70074: Monster type in viewfinder (-1=none, from CheckPhoto param_2[0])
+//   0x01F70078: Object idea ID from InScreenFunc (-1=none)
+//   0x01F7007C: Monster scoop ID from CheckPhoto return (-1=none)
+//
+// Cave 1 (0x01F70C90): Wraps CheckPhoto, stashes monster type + scoop
+// Cave 2 (0x01F70CC4): Calls InScreenFunc during TakePhotoMode==2
+//
+// Caves at 0x01F70C90–0x01F70D28.
+
+// === Hook 1: Redirect CheckPhoto call ===
+// Original at 0x001D0554: 0C077450 jal CheckPhoto
+patch=1,EE,201D0554,extended,0C7DC324
+
+// === Hook 2: Replace beq after DrawTakePhoto ===
+// Original at 0x001D0580: 1040002F beq v0,zero,0x001D0640
+patch=1,EE,201D0580,extended,087DC331
+patch=1,EE,201D0584,extended,00000000
+
+// ============================================================
+// Cave 1 (0x01F70C90): CheckPhoto wrapper
+// On entry: a0=ActiveMonster, a1=&aiStack_28
+// After call: v0=scoop(-1 if filtered), a1[0]=monster type
+// ============================================================
+patch=1,EE,21F70C90,extended,27BDFFF0 // +00: addiu sp,sp,-16
+patch=1,EE,21F70C94,extended,AFBF000C // +04: sw ra,12(sp)
+patch=1,EE,21F70C98,extended,AFA50008 // +08: sw a1,8(sp) — save &aiStack
+patch=1,EE,21F70C9C,extended,0C077450 // +0C: jal CheckPhoto (0x001DD140)
+patch=1,EE,21F70CA0,extended,00000000 // +10: nop
+patch=1,EE,21F70CA4,extended,3C0101F7 // +14: lui at,0x01F7
+patch=1,EE,21F70CA8,extended,AC22007C // +18: sw v0,0x7C(at) — monster scoop
+patch=1,EE,21F70CAC,extended,8FA30008 // +1C: lw v1,8(sp) — &aiStack
+patch=1,EE,21F70CB0,extended,8C630000 // +20: lw v1,0(v1) — monster type ID
+patch=1,EE,21F70CB4,extended,AC230074 // +24: sw v1,0x74(at) — monster type
+patch=1,EE,21F70CB8,extended,8FBF000C // +28: lw ra,12(sp)
+patch=1,EE,21F70CBC,extended,03E00008 // +2C: jr ra
+patch=1,EE,21F70CC0,extended,27BD0010 // +30: addiu sp,sp,16 (delay)
+
+// ============================================================
+// Cave 2 (0x01F70CC4): InScreenFunc for TakePhotoMode==2
+// Replaces beq at 0x001D0580.
+// On entry: v0 = DrawTakePhoto result (0 when mode!=5)
+// ============================================================
+// j 0x01F70CC4 = 0x08000000 | (0x01F70CC4 >> 2) = 0x087DC331
+// If DrawTakePhoto succeeded (mode 5 shutter), go to original path
+// bne v0,zero → original_path at 0x01F70D34
+// offset = (0x01F70D34 - 0x01F70CC8) / 4 = 0x6C/4 = 0x1B
+patch=1,EE,21F70CC4,extended,1440001B // bne v0,zero,original_path (0x01F70D34)
+patch=1,EE,21F70CC8,extended,00000000 // nop
+// DrawTakePhoto returned 0 — check camera mode
+patch=1,EE,21F70CCC,extended,8F82A220 // lw v0,-0x5DE0(gp) — TakePhotoMode
+patch=1,EE,21F70CD0,extended,24030002 // li v1,2
+// bne v0,v1 → skip_path at 0x01F70D2C
+// offset = (0x01F70D2C - 0x01F70CD8) / 4 = 0x54/4 = 0x15
+patch=1,EE,21F70CD4,extended,14430015 // bne v0,v1,skip_path (0x01F70D2C)
+patch=1,EE,21F70CD8,extended,00000000 // nop
+// TakePhotoMode==2: clear flag, call InScreenFunc
+patch=1,EE,21F70CDC,extended,3C0101F7 // lui at,0x01F7
+patch=1,EE,21F70CE0,extended,2402FFFF // li v0,-1
+patch=1,EE,21F70CE4,extended,AC220078 // sw v0,0x78(at) — IDEA_OBJECT_ID = -1
+patch=1,EE,21F70CE8,extended,27BDFFE0 // addiu sp,sp,-32
+patch=1,EE,21F70CEC,extended,AFBF001C // sw ra,28(sp)
+patch=1,EE,21F70CF0,extended,3C02447A // lui v0,0x447A (1000.0f)
+patch=1,EE,21F70CF4,extended,AFA20000 // sw v0,0(sp) — info[0] = 1000.0
+patch=1,EE,21F70CF8,extended,AFA00004 // sw zero,4(sp) — info[1] = 0.0
+patch=1,EE,21F70CFC,extended,3C02BF80 // lui v0,0xBF80 (-1.0f)
+patch=1,EE,21F70D00,extended,AFA20008 // sw v0,8(sp) — info[2] = -1.0
+patch=1,EE,21F70D04,extended,8F848DAC // lw a0,-0x7254(gp) — DngMainScene
+// jal InScreenFunc (0x00283E30) = 0x0C0A0F8C
+patch=1,EE,21F70D08,extended,0C0A0F8C // jal InScreenFunc
+patch=1,EE,21F70D0C,extended,27A50000 // addiu a1,sp,0 (delay) — &info
+// v0 = CFuncPoint ptr or 0
+// beq v0,zero → no_object at 0x01F70D24
+// offset = (0x01F70D24 - 0x01F70D14) / 4 = 0x10/4 = 0x04
+patch=1,EE,21F70D10,extended,10400004 // beq v0,zero,no_object (0x01F70D24)
+patch=1,EE,21F70D14,extended,00000000 // nop
+patch=1,EE,21F70D18,extended,8C430020 // lw v1,0x20(v0) — idea ID
+patch=1,EE,21F70D1C,extended,3C0101F7 // lui at,0x01F7 (reload — jal clobbered at)
+patch=1,EE,21F70D20,extended,AC230078 // sw v1,0x78(at) — IDEA_OBJECT_ID
+// no_object:
+patch=1,EE,21F70D24,extended,8FBF001C // lw ra,28(sp)
+patch=1,EE,21F70D28,extended,27BD0020 // addiu sp,sp,32
+// skip_path:
+// j 0x001D0640 = 0x08074190
+patch=1,EE,21F70D2C,extended,08074190 // j 0x001D0640 (original skip)
+patch=1,EE,21F70D30,extended,00000000 // nop
+// original_path:
+// j 0x001D0588 = 0x08074162
+patch=1,EE,21F70D34,extended,08074162 // j 0x001D0588 (continue normal flow)
+patch=1,EE,21F70D38,extended,00000000 // nop
+
+// ============================================================
+// Cave 3 (0x01F70D40): Town InScreenFunc for TakePhotoMode==2
+// Replaces beq at 0x001AEE94.
+// Same logic as Cave 2 but uses MainScene (gp-0x7350).
+// ============================================================
+
+// === Hook 3: Replace town beq after DrawTakePhoto ===
+// Original at 0x001AEE94: 1040003F beq v0,zero,0x001AEF94
+patch=1,EE,201AEE94,extended,087DC350
+patch=1,EE,201AEE98,extended,00000000
+
+patch=1,EE,21F70D40,extended,1440001B // bne v0,zero,original_path (0x01F70DB0)
+patch=1,EE,21F70D44,extended,00000000 // nop
+patch=1,EE,21F70D48,extended,8F82A220 // lw v0,-0x5DE0(gp) — TakePhotoMode
+patch=1,EE,21F70D4C,extended,24030002 // li v1,2
+patch=1,EE,21F70D50,extended,14430015 // bne v0,v1,skip_path (0x01F70DA8)
+patch=1,EE,21F70D54,extended,00000000 // nop
+patch=1,EE,21F70D58,extended,3C0101F7 // lui at,0x01F7
+patch=1,EE,21F70D5C,extended,2402FFFF // li v0,-1
+patch=1,EE,21F70D60,extended,AC220078 // sw v0,0x78(at) — IDEA_OBJECT_ID = -1
+patch=1,EE,21F70D64,extended,27BDFFE0 // addiu sp,sp,-32
+patch=1,EE,21F70D68,extended,AFBF001C // sw ra,28(sp)
+patch=1,EE,21F70D6C,extended,3C02447A // lui v0,0x447A (1000.0f)
+patch=1,EE,21F70D70,extended,AFA20000 // sw v0,0(sp)
+patch=1,EE,21F70D74,extended,AFA00004 // sw zero,4(sp)
+patch=1,EE,21F70D78,extended,3C02BF80 // lui v0,0xBF80 (-1.0f)
+patch=1,EE,21F70D7C,extended,AFA20008 // sw v0,8(sp)
+patch=1,EE,21F70D80,extended,8F848CB0 // lw a0,-0x7350(gp) — MainScene
+patch=1,EE,21F70D84,extended,0C0A0F8C // jal InScreenFunc (0x00283E30)
+patch=1,EE,21F70D88,extended,27A50000 // addiu a1,sp,0 (delay)
+patch=1,EE,21F70D8C,extended,10400004 // beq v0,zero,no_object (0x01F70DA0)
+patch=1,EE,21F70D90,extended,00000000 // nop
+patch=1,EE,21F70D94,extended,8C430020 // lw v1,0x20(v0) — idea ID
+patch=1,EE,21F70D98,extended,3C0101F7 // lui at,0x01F7
+patch=1,EE,21F70D9C,extended,AC230078 // sw v1,0x78(at) — IDEA_OBJECT_ID
+// no_object:
+patch=1,EE,21F70DA0,extended,8FBF001C // lw ra,28(sp)
+patch=1,EE,21F70DA4,extended,27BD0020 // addiu sp,sp,32
+// skip_path:
+patch=1,EE,21F70DA8,extended,0806BBE5 // j 0x001AEF94 (town skip)
+patch=1,EE,21F70DAC,extended,00000000 // nop
+// original_path:
+patch=1,EE,21F70DB0,extended,0806BBA7 // j 0x001AEE9C (town continue)
+patch=1,EE,21F70DB4,extended,00000000 // nop

@@ -12,7 +12,20 @@
 // Hook: replace jal DngMainDraw at 0x001CEB70
 // Original: 0C073C24  New: 0C7DC180
 
-patch=1,EE,201CEB70,extended,0C7DC180 // jal cave 0x01F70600
+// Hook: managed by 16-render-dispatch.pnach
+// patch=1,EE,201CEB70,extended,0C7DC180 // jal cave 0x01F70600 (DISABLED — dispatcher handles this)
+
+// Render-only entry at 0x01F70748: callable via jal, checks own flag, draws, returns.
+// Shares prologue/epilogue with main cave but skips DngMainDraw.
+patch=1,EE,21F70748,extended,27BDFFD0 // addiu sp, sp, -48
+patch=1,EE,21F7074C,extended,AFBF0000 // sw ra, 0(sp)
+patch=1,EE,21F70750,extended,AFB00004 // sw s0, 4(sp)
+patch=1,EE,21F70754,extended,AFB10008 // sw s1, 8(sp)
+patch=1,EE,21F70758,extended,AFB2000C // sw s2, 12(sp)
+patch=1,EE,21F7075C,extended,AFB30010 // sw s3, 16(sp)
+// Jump into flag check at 0x01F70620 (skips DngMainDraw call)
+patch=1,EE,21F70760,extended,087DC188 // j 0x01F70620
+patch=1,EE,21F70764,extended,00000000 // nop
 
 // === Code cave at 0x01F70600 ===
 

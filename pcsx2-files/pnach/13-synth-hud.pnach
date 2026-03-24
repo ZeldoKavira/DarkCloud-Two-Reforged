@@ -5,16 +5,17 @@
 // Checks HUD_FLAG AND anim float >= 1.0 before drawing
 // Cave at 0x01F70F50
 
-// Override HUD overlay hook
-patch=1,EE,201CEB70,extended,0C7DC3D4 // jal 0x01F70F50
+// Hook: managed by 16-render-dispatch.pnach
+// patch=1,EE,201CEB70,extended,0C7DC3D4 // (DISABLED — dispatcher handles this)
 
-// D00 prologue
-patch=1,EE,21F70F50,extended,27BDFFD0 // addiu sp, -48
-patch=1,EE,21F70F54,extended,AFBF0000 // sw ra, 0(sp)
-patch=1,EE,21F70F58,extended,AFB00004 // sw s0, 4(sp)
-// D0C call HUD overlay
-patch=1,EE,21F70F5C,extended,0C7DC180 // jal 0x01F70600
-patch=1,EE,21F70F60,extended,00000000 // nop
+// Render-only entry at 0x01F71048: callable via jal, checks own flag, draws, returns.
+// Skips chaining to HUD overlay and DngMainDraw.
+patch=1,EE,21F71048,extended,27BDFFD0 // addiu sp, -48
+patch=1,EE,21F7104C,extended,AFBF0000 // sw ra, 0(sp)
+patch=1,EE,21F71050,extended,AFB00004 // sw s0, 4(sp)
+// Jump into flag check at 0x01F70F64 (skips chain call)
+patch=1,EE,21F71054,extended,087DC3D9 // j 0x01F70F64
+patch=1,EE,21F71058,extended,00000000 // nop
 // D14 check HUD_FLAG
 patch=1,EE,21F70F64,extended,3C0201F7 // lui v0, 0x01F7
 patch=1,EE,21F70F68,extended,8C420040 // lw v0, 0x0040(v0)

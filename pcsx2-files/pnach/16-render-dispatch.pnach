@@ -1,0 +1,132 @@
+// Render Dispatcher — single hook that calls all render subsystems
+//
+// Hooks DngMainDraw call at 0x001CEB70.
+// Calls DngMainDraw, checks visibility, then calls each renderer.
+//
+// Renderers (jal-callable, each checks own flag, saves/restores own regs):
+//   0x01F70748: HUD overlay (dungeon medal/kill info)
+//   0x01F71048: Synth HUD (synthesis points on weapon icons)
+//   0x01F710C0: Idea HUD (camera idea detection, right side)
+//
+// IDEA_TEXT buffer: 0x01F711A0 (256 bytes ASCII, written by Python)
+//
+// Dispatcher at 0x01F71060.
+// Town dispatcher at 0x01F712A0.
+
+// === Hook ===
+patch=1,EE,201CEB70,extended,0C7DC418 // jal 0x01F71060
+
+// === Dispatcher (0x01F71060) ===
+patch=1,EE,21F71060,extended,27BDFFF0 // addiu sp,sp,-16
+patch=1,EE,21F71064,extended,AFBF000C // sw ra,12(sp)
+patch=1,EE,21F71068,extended,0C073C24 // jal DngMainDraw (0x001CF090)
+patch=1,EE,21F7106C,extended,00000000 // nop
+patch=1,EE,21F71070,extended,8F828DB0 // lw v0,-0x7250(gp) — BattleAreaScene
+patch=1,EE,21F71074,extended,10400006 // beq v0,zero,do_draw (+6 → 0x01F71090)
+patch=1,EE,21F71078,extended,00000000 // nop
+patch=1,EE,21F7107C,extended,8C42004C // lw v0,0x4C(v0)
+patch=1,EE,21F71080,extended,3C013F80 // lui at,0x3F80 (1.0f)
+patch=1,EE,21F71084,extended,0041082A // slt at,v0,at
+patch=1,EE,21F71088,extended,14200007 // bne at,zero,epilogue (+7 → 0x01F710A8)
+patch=1,EE,21F7108C,extended,00000000 // nop
+// do_draw:
+patch=1,EE,21F71090,extended,0C7DC1D2 // jal HUD overlay (0x01F70748)
+patch=1,EE,21F71094,extended,00000000 // nop
+patch=1,EE,21F71098,extended,0C7DC412 // jal Synth HUD (0x01F71048)
+patch=1,EE,21F7109C,extended,00000000 // nop
+patch=1,EE,21F710A0,extended,0C7DC430 // jal Idea HUD (0x01F710C0)
+patch=1,EE,21F710A4,extended,00000000 // nop
+// epilogue:
+patch=1,EE,21F710A8,extended,8FBF000C // lw ra,12(sp)
+patch=1,EE,21F710AC,extended,03E00008 // jr ra
+patch=1,EE,21F710B0,extended,27BD0010 // addiu sp,sp,16
+
+// ============================================================
+// Idea HUD Renderer (0x01F710C0)
+// Python writes ASCII to IDEA_TEXT (0x01F711A0, 64 bytes).
+// Draws green text with black shadow on right side if non-empty.
+// ============================================================
+patch=1,EE,21F710C0,extended,3C0201F7 // lui v0,0x01F7
+patch=1,EE,21F710C4,extended,904211A0 // lbu v0,0x11A0(v0) — first byte
+patch=1,EE,21F710C8,extended,14400003 // bne v0,zero,start (+3 → 0x01F710D8)
+patch=1,EE,21F710CC,extended,00000000 // nop
+patch=1,EE,21F710D0,extended,03E00008 // jr ra — empty, skip
+patch=1,EE,21F710D4,extended,00000000 // nop (delay)
+// start:
+patch=1,EE,21F710D8,extended,27BDFFF0 // addiu sp,sp,-16
+patch=1,EE,21F710DC,extended,AFBF000C // sw ra,12(sp)
+// SetDrawSize(10, 14)
+patch=1,EE,21F710E0,extended,3C04003E // lui a0,0x003E
+patch=1,EE,21F710E4,extended,24848090 // addiu a0,-0x7F70
+patch=1,EE,21F710E8,extended,3405000A // li a1,10
+patch=1,EE,21F710EC,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F710F0,extended,3406000E // li a2,14
+// SetClearance(9, 12)
+patch=1,EE,21F710F4,extended,3C04003E // lui a0,0x003E
+patch=1,EE,21F710F8,extended,24848090 // addiu a0,-0x7F70
+patch=1,EE,21F710FC,extended,34050009 // li a1,9
+patch=1,EE,21F71100,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F71104,extended,3406000C // li a2,12
+// SetColor black
+patch=1,EE,21F71108,extended,3C04003E // lui a0,0x003E
+patch=1,EE,21F7110C,extended,24848090 // addiu a0,-0x7F70
+patch=1,EE,21F71110,extended,3C058000 // lui a1,0x8000
+patch=1,EE,21F71114,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F71118,extended,00000000 // nop
+// DrawDirect shadow (x=401, y=71)
+patch=1,EE,21F7111C,extended,3C04003E // lui a0,0x003E
+patch=1,EE,21F71120,extended,24848090 // addiu a0,-0x7F70
+patch=1,EE,21F71124,extended,3C0501F7 // lui a1,0x01F7
+patch=1,EE,21F71128,extended,34A511A0 // ori a1,0x11A0 — IDEA_TEXT
+patch=1,EE,21F7112C,extended,34060191 // li a2,401
+patch=1,EE,21F71130,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F71134,extended,34070047 // li a3,71
+// SetColor green
+patch=1,EE,21F71138,extended,3C04003E // lui a0,0x003E
+patch=1,EE,21F7113C,extended,24848090 // addiu a0,-0x7F70
+patch=1,EE,21F71140,extended,3C058040 // lui a1,0x8040
+patch=1,EE,21F71144,extended,0C0B5148 // jal SetColor
+patch=1,EE,21F71148,extended,34A5FF40 // ori a1,0xFF40
+// DrawDirect main (x=400, y=70)
+patch=1,EE,21F7114C,extended,3C04003E // lui a0,0x003E
+patch=1,EE,21F71150,extended,24848090 // addiu a0,-0x7F70
+patch=1,EE,21F71154,extended,3C0501F7 // lui a1,0x01F7
+patch=1,EE,21F71158,extended,34A511A0 // ori a1,0x11A0 — IDEA_TEXT
+patch=1,EE,21F7115C,extended,34060190 // li a2,400
+patch=1,EE,21F71160,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F71164,extended,34070046 // li a3,70
+// Restore font
+patch=1,EE,21F71168,extended,3C04003E // lui a0,0x003E
+patch=1,EE,21F7116C,extended,24848090 // addiu a0,-0x7F70
+patch=1,EE,21F71170,extended,34050010 // li a1,16
+patch=1,EE,21F71174,extended,0C0B5128 // jal SetDrawSize
+patch=1,EE,21F71178,extended,34060014 // li a2,20
+patch=1,EE,21F7117C,extended,3C04003E // lui a0,0x003E
+patch=1,EE,21F71180,extended,24848090 // addiu a0,-0x7F70
+patch=1,EE,21F71184,extended,3405000F // li a1,15
+patch=1,EE,21F71188,extended,0C0B512C // jal SetClearance
+patch=1,EE,21F7118C,extended,34060012 // li a2,18
+// Epilogue
+patch=1,EE,21F71190,extended,8FBF000C // lw ra,12(sp)
+patch=1,EE,21F71194,extended,03E00008 // jr ra
+patch=1,EE,21F71198,extended,27BD0010 // addiu sp,sp,16
+
+// ============================================================
+// Town Dispatcher (0x01F712A0)
+// Hooks EditDraw call at 0x001AD758.
+// Calls EditDraw, then calls Idea HUD renderer.
+// No visibility check needed — EditDraw handles its own.
+// ============================================================
+
+// === Town Hook ===
+patch=1,EE,201AD758,extended,0C7DC4A8 // jal 0x01F712A0
+
+patch=1,EE,21F712A0,extended,27BDFFF0 // addiu sp,sp,-16
+patch=1,EE,21F712A4,extended,AFBF000C // sw ra,12(sp)
+patch=1,EE,21F712A8,extended,0C06B8F4 // jal EditDraw (0x001AE3D0)
+patch=1,EE,21F712AC,extended,00000000 // nop
+patch=1,EE,21F712B0,extended,0C7DC430 // jal Idea HUD (0x01F710C0)
+patch=1,EE,21F712B4,extended,00000000 // nop
+patch=1,EE,21F712B8,extended,8FBF000C // lw ra,12(sp)
+patch=1,EE,21F712BC,extended,03E00008 // jr ra
+patch=1,EE,21F712C0,extended,27BD0010 // addiu sp,sp,16

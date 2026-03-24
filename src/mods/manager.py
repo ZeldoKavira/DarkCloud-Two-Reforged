@@ -9,6 +9,10 @@ from game.game_state import GameState, GameSnapshot
 from game import addresses as addr
 from game.hud import write_hud
 from game.fishing_hud import write_fishing_hud
+from game import render
+from game.idea_hud import tick as idea_hud_tick
+
+render.register("idea_hud", idea_hud_tick)
 
 log = logging.getLogger(__name__)
 
@@ -142,6 +146,10 @@ class ModManager:
                             if skip_all or (skip_entry and getattr(self, '_pending_floor_skip', False)):
                                 self.mem.write_int(addr.EVENT_SKIP_FLAG, 3)
                                 self._pending_floor_skip = False
+                    except Exception:
+                        pass
+                    try:
+                        render.tick(self.mem, loop_no)
                     except Exception:
                         pass
                 if hud_counter % 50 == 0:

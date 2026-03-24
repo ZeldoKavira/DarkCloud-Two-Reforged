@@ -126,6 +126,8 @@ OPTION_SAVE_CHEST_NEAR_ENEMY = _MOD_SAVE_BASE + 0x10  # 0=enabled (default), 1=d
 OPTION_SAVE_FISH_NEAR_ENEMY = _MOD_SAVE_BASE + 0x11   # 0=enabled (default), 1=disabled
 OPTION_SAVE_AUTO_SKIP_EVENT = _MOD_SAVE_BASE + 0x12   # 0=enabled (default), 1=disabled
 OPTION_SAVE_SKIP_ALL_EVENTS = _MOD_SAVE_BASE + 0x13   # 1=enabled, 0=disabled (default)
+OPTION_SAVE_IDEA_HUD = _MOD_SAVE_BASE + 0x14          # 0=enabled (default), 1=disabled
+OPTION_SAVE_IDEA_NAMES = _MOD_SAVE_BASE + 0x15        # 0=disabled (default), 1=enabled
 # Reserve _MOD_SAVE_BASE + 0x14 through +0xFF for future mod options
 
 # --- Title screen ---
@@ -324,6 +326,11 @@ WEAPON_SLOT_SIZE = 0x6C
 # Synthesis points HUD (Python writes strings, PNACH cave renders)
 SYNTH_STR_MELEE = 0x21F70058       # 16-byte ASCII string for melee synth points
 SYNTH_STR_RANGED = 0x21F70068      # 16-byte ASCII string for ranged synth points
+IDEA_MONSTER_TYPE = 0x21F70074     # Monster type in viewfinder (-1=none, always set)
+IDEA_OBJECT_ID = 0x21F70078        # Object/scenery idea ID in viewfinder (-1=none)
+IDEA_MONSTER_SCOOP = 0x21F7007C    # Monster scoop ID from CheckPhoto (-1=none)
+TAKE_PHOTO_MODE = 0x20378710       # Camera state: 0=off, 2=viewfinder, 3=shutter, 5=capture
+IDEA_TEXT = 0x21F711A0             # 256-byte ASCII string for idea HUD (written by Python)
 
 # Inventory: UserDataManager = SaveData + 0x1D2A0 = 0x21E1EAB0
 # 150 slots of 0x6C bytes. Per slot: +0x00=type(short), +0x02=itemID(short), +0x10=count(short)

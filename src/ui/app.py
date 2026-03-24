@@ -1024,6 +1024,16 @@ class App:
              "init": lambda: 1 if self.state.mem.read_int(0x20376FB8) == 1 else 0,
              "on_change": self._on_debug_menu_change,
              "desc": "Enable the game's built-in debug menu."},
+            {"label": "Idea HUD",                      "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_IDEA_HUD) != 1 else 1,
+             "on_change": self._on_idea_hud_change,
+             "desc": "Show nearby uncollected photo ideas on screen."},
+            {"label": "Show Idea Names",               "buttons": 2,
+             "btn_tex": [1, 0], "btn_text": [],
+             "init": lambda: 1 if self.state.mem.read_byte(addr.OPTION_SAVE_IDEA_NAMES) == 1 else 0,
+             "on_change": self._on_idea_names_change,
+             "desc": "List the names of nearby uncollected ideas{n}below the idea count."},
         ]
         num_rows = len(self._custom_rows)
         total_new_parts = sum(r["buttons"] for r in self._custom_rows)
@@ -1333,6 +1343,12 @@ class App:
 
     def _on_debug_menu_change(self, val):
         self.state.mem.write_int(0x20376FB8, 1 if val == 1 else 0)
+
+    def _on_idea_hud_change(self, val):
+        self.state.mem.write_byte(addr.OPTION_SAVE_IDEA_HUD, 0 if val == 0 else 1)
+
+    def _on_idea_names_change(self, val):
+        self.state.mem.write_byte(addr.OPTION_SAVE_IDEA_NAMES, 1 if val == 1 else 0)
 
     def _on_jp_prices_change(self, val):
         enabled = val == 1
