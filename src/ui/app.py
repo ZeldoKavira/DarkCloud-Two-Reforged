@@ -1029,6 +1029,11 @@ class App:
              "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_IDEA_HUD) != 1 else 1,
              "on_change": self._on_idea_hud_change,
              "desc": "Show nearby uncollected photo ideas on screen."},
+            {"label": "Dim Known Recipes",             "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_INVENT_DIM) != 1 else 1,
+             "on_change": self._on_invent_dim_change,
+             "desc": "Dim memo ideas for already-discovered{n}recipes in the invention screen."},
             {"label": "Show Idea Names",               "buttons": 2,
              "btn_tex": [1, 0], "btn_text": [],
              "init": lambda: 1 if self.state.mem.read_byte(addr.OPTION_SAVE_IDEA_NAMES) == 1 else 0,
@@ -1346,6 +1351,12 @@ class App:
 
     def _on_idea_hud_change(self, val):
         self.state.mem.write_byte(addr.OPTION_SAVE_IDEA_HUD, 0 if val == 0 else 1)
+
+    def _on_invent_dim_change(self, val):
+        self.state.mem.write_byte(addr.OPTION_SAVE_INVENT_DIM, 0 if val == 0 else 1)
+        if val == 1:
+            for i in range(64):
+                self.state.mem.write_byte(addr.INVENT_DIM_TABLE + i, 0)
 
     def _on_idea_names_change(self, val):
         self.state.mem.write_byte(addr.OPTION_SAVE_IDEA_NAMES, 1 if val == 1 else 0)

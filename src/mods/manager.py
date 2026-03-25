@@ -11,6 +11,7 @@ from game.hud import write_hud
 from game.fishing_hud import write_fishing_hud
 from game import render
 from game.idea_hud import tick as idea_hud_tick
+from game.invention import tick as invention_tick
 
 render.register("idea_hud", idea_hud_tick)
 
@@ -135,6 +136,11 @@ class ModManager:
                         pass
                     try:
                         self._auto_repair_tick()
+                    except Exception:
+                        pass
+                    try:
+                        if self.mem.read_byte(addr.OPTION_SAVE_INVENT_DIM) != 1:
+                            invention_tick(self.mem)
                     except Exception:
                         pass
                     # Auto-skip cutscenes

@@ -1,0 +1,42 @@
+// Invention Screen — dim invalid memo entries
+//
+// Hooks jal DrawDirect at 0x209C68 and 0x209CA0 in the memo list draw loop.
+// Reads dim_table[s4] (s4 = entry index) to decide color.
+// dim_table at 0x01F71400 (64 bytes, written by Python: 0=bright, 1=dim)
+//
+// Draw cave at 0x01F712D0.
+// Cursor skip cave at 0x01F71340.
+
+// === Draw hooks ===
+patch=1,EE,20209C68,extended,0C7DC4B4 // jal 0x01F712D0 — normal entry
+patch=1,EE,20209CA0,extended,0C7DC4B4 // jal 0x01F712D0 — unknown entry
+
+// === Draw cave (0x01F712D0) ===
+patch=1,EE,21F712D0,extended,27BDFFF0 // addiu sp,sp,-16
+patch=1,EE,21F712D4,extended,AFBF000C // sw ra,12(sp)
+patch=1,EE,21F712D8,extended,AFA60008 // sw a2,8(sp)
+patch=1,EE,21F712DC,extended,AFA70004 // sw a3,4(sp)
+patch=1,EE,21F712E0,extended,3C0101F7 // lui at,0x01F7
+patch=1,EE,21F712E4,extended,00340821 // addu at,at,s4
+patch=1,EE,21F712E8,extended,90211400 // lbu at,0x1400(at)
+patch=1,EE,21F712EC,extended,14200005 // bne at,zero,dim (+5 → 0x01F71304)
+patch=1,EE,21F712F0,extended,340100FF // li at,0xFF (delay)
+patch=1,EE,21F712F4,extended,A0810088 // sb at,0x88(a0)
+patch=1,EE,21F712F8,extended,A0810089 // sb at,0x89(a0)
+patch=1,EE,21F712FC,extended,10000005 // b do_draw (+5 → 0x01F71314)
+patch=1,EE,21F71300,extended,A081008A // sb at,0x8A(a0) (delay)
+patch=1,EE,21F71304,extended,34010040 // li at,0x40
+patch=1,EE,21F71308,extended,A0810088 // sb at,0x88(a0)
+patch=1,EE,21F7130C,extended,A0810089 // sb at,0x89(a0)
+patch=1,EE,21F71310,extended,A081008A // sb at,0x8A(a0)
+patch=1,EE,21F71314,extended,8FA60008 // lw a2,8(sp)
+patch=1,EE,21F71318,extended,8FA70004 // lw a3,4(sp)
+patch=1,EE,21F7131C,extended,0C0B5688 // jal DrawDirect
+patch=1,EE,21F71320,extended,2D280000 // move a1,a0 (delay)
+patch=1,EE,21F71324,extended,8FBF000C // lw ra,12(sp)
+patch=1,EE,21F71328,extended,03E00008 // jr ra
+patch=1,EE,21F7132C,extended,27BD0010 // addiu sp,sp,16
+
+// === Restore original cursor code (undo old hook) ===
+patch=1,EE,2020B154,extended,02441021 // addu v0,s2,a0 (original)
+patch=1,EE,2020B158,extended,AC620134 // sw v0,0x134(v1) (original)

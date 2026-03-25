@@ -127,7 +127,8 @@ OPTION_SAVE_FISH_NEAR_ENEMY = _MOD_SAVE_BASE + 0x11   # 0=enabled (default), 1=d
 OPTION_SAVE_AUTO_SKIP_EVENT = _MOD_SAVE_BASE + 0x12   # 0=enabled (default), 1=disabled
 OPTION_SAVE_SKIP_ALL_EVENTS = _MOD_SAVE_BASE + 0x13   # 1=enabled, 0=disabled (default)
 OPTION_SAVE_IDEA_HUD = _MOD_SAVE_BASE + 0x14          # 0=enabled (default), 1=disabled
-OPTION_SAVE_IDEA_NAMES = _MOD_SAVE_BASE + 0x15        # 0=disabled (default), 1=enabled
+OPTION_SAVE_INVENT_DIM = _MOD_SAVE_BASE + 0x15        # 0=enabled (default), 1=disabled
+OPTION_SAVE_IDEA_NAMES = _MOD_SAVE_BASE + 0x16        # 0=disabled (default), 1=enabled
 # Reserve _MOD_SAVE_BASE + 0x14 through +0xFF for future mod options
 
 # --- Title screen ---
@@ -331,6 +332,10 @@ IDEA_OBJECT_ID = 0x21F70078        # Object/scenery idea ID in viewfinder (-1=no
 IDEA_MONSTER_SCOOP = 0x21F7007C    # Monster scoop ID from CheckPhoto (-1=none)
 TAKE_PHOTO_MODE = 0x20378710       # Camera state: 0=off, 2=viewfinder, 3=shutter, 5=capture
 IDEA_TEXT = 0x21F711A0             # 256-byte ASCII string for idea HUD (written by Python)
+INVENT_DIM_TABLE = 0x21F71400      # 64-byte dim table for invention memo list (0=bright, 1=dim)
+CMENU_INVENT_PTR = 0x20377668      # CMenuInventPt (gp - 0x6E88)
+NETA_MEMO_ID = 0x21ECBFD0          # NetaMemoID array (shorts, idea IDs for memo list)
+PHOTO_BASE = 0x21E26DE8            # Photo info array (30 slots × 0x18, idea ID at +0x0A)
 
 # Inventory: UserDataManager = SaveData + 0x1D2A0 = 0x21E1EAB0
 # 150 slots of 0x6C bytes. Per slot: +0x00=type(short), +0x02=itemID(short), +0x10=count(short)
