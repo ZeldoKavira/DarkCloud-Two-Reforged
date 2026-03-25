@@ -1029,7 +1029,7 @@ class App:
              "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_IDEA_HUD) != 1 else 1,
              "on_change": self._on_idea_hud_change,
              "desc": "Show nearby uncollected photo ideas on screen."},
-            {"label": "Dim Known Recipes",             "buttons": 2,
+            {"label": "Invention Helper",             "buttons": 2,
              "btn_tex": [0, 1], "btn_text": [],
              "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_INVENT_DIM) != 1 else 1,
              "on_change": self._on_invent_dim_change,
