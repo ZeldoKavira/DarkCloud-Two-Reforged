@@ -129,6 +129,10 @@ OPTION_SAVE_SKIP_ALL_EVENTS = _MOD_SAVE_BASE + 0x13   # 1=enabled, 0=disabled (d
 OPTION_SAVE_IDEA_HUD = _MOD_SAVE_BASE + 0x14          # 0=enabled (default), 1=disabled
 OPTION_SAVE_INVENT_DIM = _MOD_SAVE_BASE + 0x15        # 0=enabled (default), 1=disabled
 OPTION_SAVE_IDEA_NAMES = _MOD_SAVE_BASE + 0x16        # 0=disabled (default), 1=enabled
+OPTION_SAVE_BUILDUP_HELPER = _MOD_SAVE_BASE + 0x17   # 0=enabled (default), 1=disabled
+
+# Runtime flag for PNACH buildup helper cave
+BUILDUP_HELPER_FLAG = 0x21F71700
 # Reserve _MOD_SAVE_BASE + 0x14 through +0xFF for future mod options
 
 # --- Title screen ---

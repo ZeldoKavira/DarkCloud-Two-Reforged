@@ -1034,6 +1034,11 @@ class App:
              "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_INVENT_DIM) != 1 else 1,
              "on_change": self._on_invent_dim_change,
              "desc": "Dim memo ideas for already-discovered{n}recipes in the invention screen."},
+            {"label": "Buildup Helper",                "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_BUILDUP_HELPER) != 1 else 1,
+             "on_change": self._on_buildup_helper_change,
+             "desc": "Flash target stat requirements during the{n}weapon buildup screen."},
             {"label": "Show Idea Names",               "buttons": 2,
              "btn_tex": [1, 0], "btn_text": [],
              "init": lambda: 1 if self.state.mem.read_byte(addr.OPTION_SAVE_IDEA_NAMES) == 1 else 0,
@@ -1357,6 +1362,11 @@ class App:
         if val == 1:
             for i in range(64):
                 self.state.mem.write_byte(addr.INVENT_DIM_TABLE + i, 0)
+
+    def _on_buildup_helper_change(self, val):
+        enabled = val == 0
+        self.state.mem.write_byte(addr.OPTION_SAVE_BUILDUP_HELPER, 0 if enabled else 1)
+        self.state.mem.write_int(addr.BUILDUP_HELPER_FLAG, 1 if enabled else 0)
 
     def _on_idea_names_change(self, val):
         self.state.mem.write_byte(addr.OPTION_SAVE_IDEA_NAMES, 1 if val == 1 else 0)

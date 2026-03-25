@@ -1054,3 +1054,129 @@ patch=1,EE,21F7132C,extended,27BD0010 // addiu sp,sp,16
 // === Restore original cursor code (undo old hook) ===
 patch=1,EE,2020B154,extended,02441021 // addu v0,s2,a0 (original)
 patch=1,EE,2020B158,extended,AC620134 // sw v0,0x134(v1) (original)
+// ======== 19-buildup-helper ========
+// Buildup Helper — show target stat values during red flash
+//
+// Hooks element stat SetNumber loop and Attack SetNumber call.
+// During red flash phase, substitutes current stat with target requirement
+// only if current*10 < target*9 (matching game's *0.9 threshold).
+// Never writes to weapon data — only changes what's passed to the renderer.
+// === Hooks ===
+patch=1,EE,2023F784,extended,0C7DC540 // jal element_cave (0x01F71500)
+patch=1,EE,2023F744,extended,0C7DC580 // jal attack_cave (0x01F71600)
+// === Element stat cave (0x01F71500) ===
+// On entry: a0=form, a1=part name, a2=current stat, s2=element index (0-7)
+patch=1,EE,21F71500,extended,27BDFFE0 // addiu sp, sp, -32
+patch=1,EE,21F71504,extended,FFBF0010 // sd ra, 16(sp)
+patch=1,EE,21F71508,extended,AFA60000 // sw a2, 0(sp) — save original a2
+// Check runtime flag
+patch=1,EE,21F7150C,extended,3C0101F7 // lui at, 0x01F7
+patch=1,EE,21F71510,extended,80211700 // lb at, 0x1700(at) — buildup helper flag
+patch=1,EE,21F71514,extended,10200025 // beq at, zero, el_call (+37)
+patch=1,EE,21F71518,extended,00000000 // nop
+// Check buildup active
+patch=1,EE,21F7151C,extended,3C0101ED // lui at, 0x01ED
+patch=1,EE,21F71520,extended,8021DC22 // lb at, -0x23DE(at)
+patch=1,EE,21F71524,extended,10200021 // beq at, zero, el_call (+33)
+patch=1,EE,21F71528,extended,00000000 // nop
+// Check flash counter > 0x1E
+patch=1,EE,21F7152C,extended,8381975C // lb at, -0x68A4(gp)
+patch=1,EE,21F71530,extended,2821001F // slti at, at, 0x1F
+patch=1,EE,21F71534,extended,1420001D // bne at, zero, el_call (+29)
+patch=1,EE,21F71538,extended,00000000 // nop
+// Bounds check
+patch=1,EE,21F7153C,extended,2A410008 // slti at, s2, 8
+patch=1,EE,21F71540,extended,1020001A // beq at, zero, el_call (+26)
+patch=1,EE,21F71544,extended,00000000 // nop
+// Load target ptr
+patch=1,EE,21F71548,extended,3C0101ED // lui at, 0x01ED
+patch=1,EE,21F7154C,extended,9022DC23 // lbu v0, -0x23DD(at)
+patch=1,EE,21F71550,extended,00021080 // sll v0, v0, 2
+patch=1,EE,21F71554,extended,3C0101ED // lui at, 0x01ED
+patch=1,EE,21F71558,extended,00220821 // addu at, at, v0
+patch=1,EE,21F7155C,extended,8C22DC4C // lw v0, -0x23B4(at)
+patch=1,EE,21F71560,extended,10400012 // beq v0, zero, el_call (+18)
+patch=1,EE,21F71564,extended,00000000 // nop
+// Compute target element addr: v0 = target + s2*2
+patch=1,EE,21F71568,extended,00120840 // sll at, s2, 1
+patch=1,EE,21F7156C,extended,00411021 // addu v0, v0, at
+// Load target value into at
+patch=1,EE,21F71570,extended,8441000C // lh at, 0x0C(v0)
+// Threshold: a2*10 < at*9
+patch=1,EE,21F71574,extended,3403000A // ori v1, zero, 10
+patch=1,EE,21F71578,extended,00C30018 // mult a2, v1
+patch=1,EE,21F7157C,extended,00001812 // mflo v1 — v1 = a2*10
+patch=1,EE,21F71580,extended,AFA30004 // sw v1, 4(sp) — save a2*10
+patch=1,EE,21F71584,extended,34030009 // ori v1, zero, 9
+patch=1,EE,21F71588,extended,00230018 // mult at, v1
+patch=1,EE,21F7158C,extended,00001812 // mflo v1 — v1 = target*9
+patch=1,EE,21F71590,extended,8FA10004 // lw at, 4(sp) — at = a2*10
+patch=1,EE,21F71594,extended,0023082A // slt at, at, v1 — a2*10 < target*9?
+patch=1,EE,21F71598,extended,10200004 // beq at, zero, el_call (+4)
+patch=1,EE,21F7159C,extended,00000000 // nop
+// Substitute target value
+patch=1,EE,21F715A0,extended,8446000C // lh a2, 0x0C(v0)
+patch=1,EE,21F715A4,extended,10000002 // b el_do_call (+2)
+patch=1,EE,21F715A8,extended,00000000 // nop
+// el_call: restore original a2
+patch=1,EE,21F715AC,extended,8FA60000 // lw a2, 0(sp)
+// el_do_call:
+patch=1,EE,21F715B0,extended,0C089728 // jal SetNumber
+patch=1,EE,21F715B4,extended,00000000 // nop
+patch=1,EE,21F715B8,extended,DFBF0010 // ld ra, 16(sp)
+patch=1,EE,21F715BC,extended,03E00008 // jr ra
+patch=1,EE,21F715C0,extended,27BD0020 // addiu sp, sp, 32
+// === Attack cave (0x01F71600) ===
+// On entry: a0=form, a1=part name, a2=attack value
+patch=1,EE,21F71600,extended,27BDFFE0 // addiu sp, sp, -32
+patch=1,EE,21F71604,extended,FFBF0010 // sd ra, 16(sp)
+patch=1,EE,21F71608,extended,AFA60000 // sw a2, 0(sp)
+// Check runtime flag
+patch=1,EE,21F7160C,extended,3C0101F7 // lui at, 0x01F7
+patch=1,EE,21F71610,extended,80211700 // lb at, 0x1700(at)
+patch=1,EE,21F71614,extended,10200020 // beq at, zero, atk_call (+32)
+patch=1,EE,21F71618,extended,00000000 // nop
+// Check buildup active
+patch=1,EE,21F7161C,extended,3C0101ED // lui at, 0x01ED
+patch=1,EE,21F71620,extended,8021DC22 // lb at, -0x23DE(at)
+patch=1,EE,21F71624,extended,1020001C // beq at, zero, atk_call (+28)
+patch=1,EE,21F71628,extended,00000000 // nop
+// Check flash counter
+patch=1,EE,21F7162C,extended,8381975C // lb at, -0x68A4(gp)
+patch=1,EE,21F71630,extended,2821001F // slti at, at, 0x1F
+patch=1,EE,21F71634,extended,14200018 // bne at, zero, atk_call (+24)
+patch=1,EE,21F71638,extended,00000000 // nop
+// Load target ptr
+patch=1,EE,21F7163C,extended,3C0101ED // lui at, 0x01ED
+patch=1,EE,21F71640,extended,9022DC23 // lbu v0, -0x23DD(at)
+patch=1,EE,21F71644,extended,00021080 // sll v0, v0, 2
+patch=1,EE,21F71648,extended,3C0101ED // lui at, 0x01ED
+patch=1,EE,21F7164C,extended,00220821 // addu at, at, v0
+patch=1,EE,21F71650,extended,8C22DC4C // lw v0, -0x23B4(at)
+patch=1,EE,21F71654,extended,10400010 // beq v0, zero, atk_call (+16)
+patch=1,EE,21F71658,extended,00000000 // nop
+// Load target attack, threshold check
+patch=1,EE,21F7165C,extended,84410004 // lh at, 0x04(v0)
+patch=1,EE,21F71660,extended,3403000A // ori v1, zero, 10
+patch=1,EE,21F71664,extended,00C30018 // mult a2, v1
+patch=1,EE,21F71668,extended,00001812 // mflo v1
+patch=1,EE,21F7166C,extended,AFA30004 // sw v1, 4(sp)
+patch=1,EE,21F71670,extended,34030009 // ori v1, zero, 9
+patch=1,EE,21F71674,extended,00230018 // mult at, v1
+patch=1,EE,21F71678,extended,00001812 // mflo v1
+patch=1,EE,21F7167C,extended,8FA10004 // lw at, 4(sp)
+patch=1,EE,21F71680,extended,0023082A // slt at, at, v1
+patch=1,EE,21F71684,extended,10200004 // beq at, zero, atk_call (+4)
+patch=1,EE,21F71688,extended,00000000 // nop
+// Substitute
+patch=1,EE,21F7168C,extended,84460004 // lh a2, 0x04(v0)
+patch=1,EE,21F71690,extended,10000002 // b atk_do_call (+2)
+patch=1,EE,21F71694,extended,00000000 // nop
+// atk_call: restore original a2
+patch=1,EE,21F71698,extended,8FA60000 // lw a2, 0(sp)
+// atk_do_call:
+patch=1,EE,21F7169C,extended,0C089728 // jal SetNumber
+patch=1,EE,21F716A0,extended,00000000 // nop
+patch=1,EE,21F716A4,extended,DFBF0010 // ld ra, 16(sp)
+patch=1,EE,21F716A8,extended,03E00008 // jr ra
+patch=1,EE,21F716AC,extended,27BD0020 // addiu sp, sp, 32

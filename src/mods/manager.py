@@ -238,5 +238,9 @@ class ModManager:
             for a, fast, orig in addr.PICKUP_DELAY_PATCHES:
                 self.mem.write_int(a, fast)
 
+        # Buildup helper runtime flag
+        self.mem.write_int(addr.BUILDUP_HELPER_FLAG,
+                           0 if self.mem.read_byte(addr.OPTION_SAVE_BUILDUP_HELPER) == 1 else 1)
+
         if self.on_options_loaded:
             self.on_options_loaded(speed_label, pickup_label, map_label, map_tgt_label, dng_speed_label)
