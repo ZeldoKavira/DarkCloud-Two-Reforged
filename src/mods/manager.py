@@ -12,6 +12,7 @@ from game.fishing_hud import write_fishing_hud
 from game import render
 from game.idea_hud import tick as idea_hud_tick
 from game.invention import tick as invention_tick
+from mods import auto_repair, auto_key, event_skip, map_reveal, jp_prices
 
 render.register("idea_hud", idea_hud_tick)
 
@@ -33,10 +34,8 @@ class ModManager:
         self.auto_repair = False
         self.auto_key = False
         self.jp_prices = False
-        self._shop_patched = False
-        self.on_options_loaded = None  # callback(speed_label, pickup_label, map_label, map_tgt_label)
-        self.on_early_texture_patch = None  # callback to patch textures early
-
+        self.on_options_loaded = None
+        self.on_early_texture_patch = None
         self.all_mods = []
 
     def start(self):
@@ -92,20 +91,18 @@ class ModManager:
 
             # Detect entering in-game (dungeon or town)
             if not self._ingame and loop_no in (addr.Mode.DUNGEON, addr.Mode.TOWN):
-                # Wait for load to finish — keep checking until loop stabilizes
                 time.sleep(2)
                 loop_no = self.mem.read_int(addr.LOOP_NO)
                 if loop_no not in (addr.Mode.DUNGEON, addr.Mode.TOWN):
-                    continue  # was transient, not actually in-game yet
+                    continue
 
                 if loop_no == addr.Mode.TOWN and self.mem.read_byte(addr.ENHANCED_MOD_SAVE_FLAG) != 1:
-                    # New game — stamp save and write defaults
                     self.mem.write_byte(addr.ENHANCED_MOD_SAVE_FLAG, 1)
-                    self.mem.write_byte(addr.OPTION_SAVE_RUN_SPEED, 1)       # 1.5x
-                    self.mem.write_byte(addr.OPTION_SAVE_PICKUP_RADIUS, 1)   # 5x
-                    self.mem.write_byte(addr.OPTION_SAVE_MAP_POS_TARGET, 4)  # Center-Right
-                    self.mem.write_byte(addr.OPTION_SAVE_AUTO_REPAIR, 1)     # on
-                    self.mem.write_byte(addr.OPTION_SAVE_AUTO_KEY, 1)        # on
+                    self.mem.write_byte(addr.OPTION_SAVE_RUN_SPEED, 1)
+                    self.mem.write_byte(addr.OPTION_SAVE_PICKUP_RADIUS, 1)
+                    self.mem.write_byte(addr.OPTION_SAVE_MAP_POS_TARGET, 4)
+                    self.mem.write_byte(addr.OPTION_SAVE_AUTO_REPAIR, 1)
+                    self.mem.write_byte(addr.OPTION_SAVE_AUTO_KEY, 1)
                     log.info("New game detected, set defaults")
 
                 if self.mem.read_byte(addr.ENHANCED_MOD_SAVE_FLAG) == 1:
@@ -117,7 +114,7 @@ class ModManager:
                         self.on_early_texture_patch()
                 else:
                     log.warning("Not a Reforged save file — mods disabled for this session.")
-                    self._ingame = True  # mark as in-game so we don't keep checking
+                    self._ingame = True
 
             # Detect returning to title
             if self._ingame and loop_no in (addr.Mode.TITLE, addr.Mode.EXIT):
@@ -125,17 +122,16 @@ class ModManager:
                 self._stop_mods()
                 self._ingame = False
 
-            # Update HUD overlay
             if self._ingame:
                 hud_counter = getattr(self, '_hud_counter', 0) + 1
                 self._hud_counter = hud_counter
                 if hud_counter % 5 == 0:
                     try:
-                        self._auto_key_tick()
+                        auto_key.tick(self.mem, self.auto_key, getattr(self, 'dialog', None))
                     except Exception:
                         pass
                     try:
-                        self._auto_repair_tick()
+                        auto_repair.tick(self.mem, self.auto_repair)
                     except Exception:
                         pass
                     try:
@@ -143,15 +139,8 @@ class ModManager:
                             invention_tick(self.mem)
                     except Exception:
                         pass
-                    # Auto-skip cutscenes
                     try:
-                        ev = self.mem.read_int(addr.EVENT_SKIP_FLAG)
-                        if ev == 1:
-                            skip_all = self.mem.read_byte(addr.OPTION_SAVE_SKIP_ALL_EVENTS) == 1
-                            skip_entry = self.mem.read_byte(addr.OPTION_SAVE_AUTO_SKIP_EVENT) != 1
-                            if skip_all or (skip_entry and getattr(self, '_pending_floor_skip', False)):
-                                self.mem.write_int(addr.EVENT_SKIP_FLAG, 3)
-                                self._pending_floor_skip = False
+                        event_skip.tick(self.mem)
                     except Exception:
                         pass
                     try:
@@ -171,11 +160,11 @@ class ModManager:
                     except Exception as e:
                         log.error("HUD error: %s", e)
                     try:
-                        self._start_floor_tick()
+                        map_reveal.tick(self.mem)
                     except Exception:
                         pass
                     try:
-                        self._jp_price_tick()
+                        jp_prices.tick(self.mem, self.jp_prices)
                     except Exception:
                         pass
                 if hud_counter % 30 == 0:
@@ -224,11 +213,10 @@ class ModManager:
         log.info("Loaded saved options — town_speed=%s, dng_speed=%s, pickup=%s, map=%s, map_target=%s",
                  speed_label, dng_speed_label, pickup_label, map_label, map_tgt_label)
 
-        # Load toggle options from save data
         self.auto_repair = self.mem.read_byte(addr.OPTION_SAVE_AUTO_REPAIR) == 1
         self.auto_key = self.mem.read_byte(addr.OPTION_SAVE_AUTO_KEY) == 1
         self.jp_prices = self.mem.read_byte(addr.OPTION_SAVE_JP_PRICES) == 1
-        dungeon_hud = self.mem.read_byte(addr.OPTION_SAVE_DUNGEON_HUD) != 1  # 0=on (default)
+        dungeon_hud = self.mem.read_byte(addr.OPTION_SAVE_DUNGEON_HUD) != 1
         synth_hud = self.mem.read_byte(addr.OPTION_SAVE_SYNTH_HUD) != 1
         settings.set("auto_repair", self.auto_repair)
         settings.set("auto_key", self.auto_key)
@@ -237,187 +225,18 @@ class ModManager:
         gift_box = self.mem.read_byte(addr.OPTION_SAVE_GIFT_BOX) != 1
         settings.set("gift_box_hud", gift_box)
 
-        # Apply fast bite patch if enabled
         if settings.get("fast_bite") is not False:
             self.mem.write_int(0x20302D80, 0x2411001E)
 
-        # Apply chest near enemy patch if enabled (default on = byte 0)
         if self.mem.read_byte(addr.OPTION_SAVE_CHEST_NEAR_ENEMY) != 1:
             self.mem.write_int(addr.CHEST_ENEMY_CHECK, 0x00000000)
 
-        # Apply fish near enemy patch if enabled (default on = byte 0)
         if self.mem.read_byte(addr.OPTION_SAVE_FISH_NEAR_ENEMY) != 1:
             self.mem.write_int(addr.FISH_ENEMY_CHECK, 0x00000000)
 
-        # Apply fast pickup patch if enabled
         if self.mem.read_byte(addr.OPTION_SAVE_FAST_PICKUP) != 1:
             for a, fast, orig in addr.PICKUP_DELAY_PATCHES:
                 self.mem.write_int(a, fast)
 
         if self.on_options_loaded:
             self.on_options_loaded(speed_label, pickup_label, map_label, map_tgt_label, dng_speed_label)
-
-    def _auto_repair_tick(self):
-        """Check if PNACH cave consumed a repair powder, then update inventory."""
-        if not self.auto_repair:
-            if getattr(self, '_repair_flag_set', False):
-                self.mem.write_int(addr.AUTO_REPAIR_FLAG, 0)
-                self.mem.write_int(addr.AUTO_REPAIR_FLAG_RANGED, 0)
-                self.mem.write_int(addr.AUTO_REPAIR_FLAG_ARMBAND, 0)
-                self._repair_flag_set = False
-            return
-
-        consumed = self.mem.read_int(addr.REPAIR_CONSUMED)
-        if consumed != 0:
-            self.mem.write_int(addr.REPAIR_CONSUMED, 0)
-            if consumed == 1:
-                item_id = addr.REPAIR_POWDER_MELEE
-                flag_addr = addr.AUTO_REPAIR_FLAG
-            elif consumed == 2:
-                item_id = addr.REPAIR_POWDER_RANGED
-                flag_addr = addr.AUTO_REPAIR_FLAG_RANGED
-            else:
-                item_id = addr.REPAIR_POWDER_ARMBAND
-                flag_addr = addr.AUTO_REPAIR_FLAG_ARMBAND
-            cached = getattr(self, '_repair_slot_cache', {}).get(item_id)
-            if cached is not None:
-                iid = self.mem.read_short(cached + 2)
-                count = self.mem.read_short(cached + 0x10)
-                if iid == item_id and count > 0:
-                    self.mem.write_short(cached + 0x10, count - 1)
-                    log.info("Auto-used Repair Powder (0x%X)", item_id)
-                    if count - 1 <= 0:
-                        self._repair_needs_scan = True
-                else:
-                    self._repair_needs_scan = True
-            else:
-                self._repair_needs_scan = True
-            # Re-enable this type's flag
-            self.mem.write_int(flag_addr, 1)
-
-        if getattr(self, '_repair_needs_scan', True):
-            cache = {}
-            melee_slot = self._find_item(addr.REPAIR_POWDER_MELEE)
-            ranged_slot = self._find_item(addr.REPAIR_POWDER_RANGED)
-            armband_slot = self._find_item(addr.REPAIR_POWDER_ARMBAND)
-            if melee_slot: cache[addr.REPAIR_POWDER_MELEE] = melee_slot
-            if ranged_slot: cache[addr.REPAIR_POWDER_RANGED] = ranged_slot
-            if armband_slot: cache[addr.REPAIR_POWDER_ARMBAND] = armband_slot
-            self._repair_slot_cache = cache
-            self.mem.write_int(addr.AUTO_REPAIR_FLAG, 1 if melee_slot else 0)
-            self.mem.write_int(addr.AUTO_REPAIR_FLAG_RANGED, 1 if ranged_slot else 0)
-            self.mem.write_int(addr.AUTO_REPAIR_FLAG_ARMBAND, 1 if armband_slot else 0)
-            self._repair_flag_set = bool(cache)
-            self._repair_needs_scan = False
-
-    def _start_floor_tick(self):
-        """Reveal map / place crystal on new dungeon floors."""
-        ptr = self.mem.read_int(addr.NOW_FLOOR_INFO_PTR)
-        if ptr == 0:
-            self._last_floor_ptr_sf = None
-            return
-        if ptr == getattr(self, '_last_floor_ptr_sf', None):
-            return
-        self._last_floor_ptr_sf = ptr
-        self._pending_floor_skip = True
-        PINE = 0x20000000
-        log.info("New floor detected (ptr=0x%X)", ptr)
-        scene_ptr = self.mem.read_int(0x2037729C)  # DngMainScene
-        if scene_ptr == 0:
-            return
-        scene = PINE + scene_ptr
-        flags = self.mem.read_int(scene + 0x2FF4)
-        if self.mem.read_byte(addr.OPTION_SAVE_START_MAP) == 1:
-            flags |= 1
-            self._reveal_map()
-        if self.mem.read_byte(addr.OPTION_SAVE_START_CRYSTAL) == 1:
-            flags |= 2
-        self.mem.write_int(scene + 0x2FF4, flags)
-
-    def _reveal_map(self):
-        """Replicate MinimapAllVisible — set all map cells visible."""
-        PINE = 0x20000000
-        automap = PINE + 0x01EA0480
-        w = self.mem.read_short(automap + 0x1B8)
-        h = self.mem.read_short(automap + 0x1BA)
-        grid_ptr = self.mem.read_int(automap + 0x1CC)
-        if grid_ptr == 0 or w == 0 or h == 0:
-            return
-        grid = PINE + grid_ptr
-        for i in range(w * h):
-            self.mem.write_short(grid + i * 0x1C + 0x0C, 1)
-
-    def _jp_price_tick(self):
-        """Patch shop prices to JP values when shop is open."""
-        PINE = 0x20000000
-        shop = self.mem.read_int(addr.SHOP_PTR)
-        if shop == 0:
-            self._shop_patched = False
-            return
-        if not self.jp_prices or self._shop_patched:
-            return
-        for item_id, buy, sell in addr.JP_PRICE_PATCHES:
-            base = PINE + shop + addr.SHOP_PRICE_OFF + item_id * 8
-            if buy is not None:
-                self.mem.write_int(base, buy)
-            if sell is not None:
-                self.mem.write_int(base + 4, sell)
-        self._shop_patched = True
-        log.info("Applied JP price patches")
-
-
-    def _auto_key_tick(self):
-        """Auto-use dungeon key on gate when player presses X."""
-        if not self.auto_key:
-            return
-        PINE = 0x20000000
-        menu_state = self.mem.read_int(PINE + 0x01ECD618)
-        if menu_state != 9:
-            return
-        key_id = self.mem.read_short(PINE + 0x01ECD64C)
-        if key_id < 0x151 or key_id > 0x15F:
-            return
-        if self._find_item(key_id) is not None:
-            self._consume_item(key_id)
-            p_use = self.mem.read_int(0x20377CE0)
-            if p_use != 0:
-                self.mem.write_int(0x20000000 + p_use + 4, key_id)
-            self.mem.write_int(0x20377CE0, 0)
-            self.mem.write_int(PINE + 0x01ECD630, key_id)
-            self.mem.write_int(PINE + 0x01ECD618, 0)
-            self.mem.write_int(PINE + 0x01ECE500, 0)
-            log.info("Auto-used gate key 0x%X", key_id)
-        else:
-            self.mem.write_int(PINE + 0x01ECD630, 0)
-            self.mem.write_int(PINE + 0x01ECD618, 0)
-            self.mem.write_int(PINE + 0x01ECE500, 0)
-            if hasattr(self, 'dialog') and self.dialog:
-                self.dialog.show("You don't have the required key.", duration=3, mode=0)
-
-    def _find_item(self, item_id):
-        """Find inventory or equipped slot address containing item_id, or None."""
-        for base, count in [(addr.USER_DATA_MANAGER, addr.INVENTORY_SLOT_COUNT),
-                            (addr.EQUIP_SLOT_BASE, addr.EQUIP_SLOT_COUNT),
-                            (addr.EQUIP_SLOT_BASE_MON, addr.EQUIP_SLOT_COUNT)]:
-            for i in range(count):
-                slot = base + i * addr.INVENTORY_SLOT_SIZE
-                iid = self.mem.read_short(slot + 2)
-                if iid == item_id:
-                    c = self.mem.read_short(slot + 0x10)
-                    if c > 0:
-                        return slot
-        return None
-
-    def _consume_item(self, item_id):
-        """Decrement count of item_id in inventory. Returns True if successful."""
-        slot = self._find_item(item_id)
-        if slot is None:
-            return False
-        count = self.mem.read_short(slot + 0x10)
-        if count <= 1:
-            self.mem.write_short(slot + 0x10, 0)
-            self.mem.write_short(slot + 0x00, 0)  # clear exists flag
-            self.mem.write_short(slot + 0x02, 0)  # clear item ID
-        else:
-            self.mem.write_short(slot + 0x10, count - 1)
-        return True

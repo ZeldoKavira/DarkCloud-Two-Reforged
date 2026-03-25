@@ -1364,7 +1364,8 @@ class App:
     def _on_jp_prices_change(self, val):
         enabled = val == 1
         self.manager.jp_prices = enabled
-        self.manager._shop_patched = False
+        import mods.jp_prices as _jp
+        _jp._shop_patched = False
         self.state.mem.write_byte(addr.OPTION_SAVE_JP_PRICES, 1 if enabled else 0)
 
     def _on_chest_enemy_change(self, val):
