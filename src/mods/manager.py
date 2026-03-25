@@ -242,5 +242,9 @@ class ModManager:
         self.mem.write_int(addr.BUILDUP_HELPER_FLAG,
                            0 if self.mem.read_byte(addr.OPTION_SAVE_BUILDUP_HELPER) == 1 else 1)
 
+        # Buildup name reveal
+        if self.mem.read_byte(addr.OPTION_SAVE_BUILDUP_NAMES) != 1:
+            self.mem.write_int(addr.BUILDUP_NAME_CHECK, addr.BUILDUP_NAME_CHECK_SHOW)
+
         if self.on_options_loaded:
             self.on_options_loaded(speed_label, pickup_label, map_label, map_tgt_label, dng_speed_label)

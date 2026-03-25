@@ -1039,6 +1039,11 @@ class App:
              "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_BUILDUP_HELPER) != 1 else 1,
              "on_change": self._on_buildup_helper_change,
              "desc": "Flash target stat requirements during the{n}weapon buildup screen."},
+            {"label": "Show Unknown Buildup Names",   "buttons": 2,
+             "btn_tex": [0, 1], "btn_text": [],
+             "init": lambda: 0 if self.state.mem.read_byte(addr.OPTION_SAVE_BUILDUP_NAMES) != 1 else 1,
+             "on_change": self._on_buildup_names_change,
+             "desc": "Reveal weapon names on the buildup screen{n}instead of showing ???."},
             {"label": "Show Idea Names",               "buttons": 2,
              "btn_tex": [1, 0], "btn_text": [],
              "init": lambda: 1 if self.state.mem.read_byte(addr.OPTION_SAVE_IDEA_NAMES) == 1 else 0,
@@ -1367,6 +1372,12 @@ class App:
         enabled = val == 0
         self.state.mem.write_byte(addr.OPTION_SAVE_BUILDUP_HELPER, 0 if enabled else 1)
         self.state.mem.write_int(addr.BUILDUP_HELPER_FLAG, 1 if enabled else 0)
+
+    def _on_buildup_names_change(self, val):
+        enabled = val == 0
+        self.state.mem.write_byte(addr.OPTION_SAVE_BUILDUP_NAMES, 0 if enabled else 1)
+        self.state.mem.write_int(addr.BUILDUP_NAME_CHECK,
+                                 addr.BUILDUP_NAME_CHECK_SHOW if enabled else addr.BUILDUP_NAME_CHECK_ORIG)
 
     def _on_idea_names_change(self, val):
         self.state.mem.write_byte(addr.OPTION_SAVE_IDEA_NAMES, 1 if val == 1 else 0)

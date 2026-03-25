@@ -130,9 +130,21 @@ OPTION_SAVE_IDEA_HUD = _MOD_SAVE_BASE + 0x14          # 0=enabled (default), 1=d
 OPTION_SAVE_INVENT_DIM = _MOD_SAVE_BASE + 0x15        # 0=enabled (default), 1=disabled
 OPTION_SAVE_IDEA_NAMES = _MOD_SAVE_BASE + 0x16        # 0=disabled (default), 1=enabled
 OPTION_SAVE_BUILDUP_HELPER = _MOD_SAVE_BASE + 0x17   # 0=enabled (default), 1=disabled
+OPTION_SAVE_BUILDUP_NAMES = _MOD_SAVE_BASE + 0x18    # 0=enabled (default), 1=disabled
 
 # Runtime flag for PNACH buildup helper cave
 BUILDUP_HELPER_FLAG = 0x21F71700
+
+# Buildup screen data
+BUILDUP_ACTIVE = 0x21ECDC22          # byte: 1 when buildup screen open
+BUILDUP_NUM_TARGETS = 0x21ECDC28     # int: number of buildup targets
+BUILDUP_SEEN_FLAGS = 0x21ECDC38      # int[]: 0=hidden (???), 1=seen
+
+# Buildup name reveal: bne at 0x240900 skips ??? replacement when seen!=0
+# Patch to unconditional branch to always show real names
+BUILDUP_NAME_CHECK = 0x20240900
+BUILDUP_NAME_CHECK_ORIG = 0x14400007  # bne v0, zero, +7
+BUILDUP_NAME_CHECK_SHOW = 0x10000007  # b +7 (always skip ??? replacement)
 # Reserve _MOD_SAVE_BASE + 0x14 through +0xFF for future mod options
 
 # --- Title screen ---
