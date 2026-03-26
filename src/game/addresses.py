@@ -259,8 +259,8 @@ def pickup_radius_lui(upper16):
 #   2) +0x52 <= 0 (timer expired) — b at 0x001b9100 skips if timer > 0
 # NOP both to allow pickup while still bouncing.
 PICKUP_DELAY_PATCHES = [
-    (0x201b90ec, 0x00000000, 0x2A006010),  # beq v1,zero,return → nop
-    (0x201b9100, 0x00000000, 0x26000010),  # b return → nop
+    # Only NOP the timer check; keep the landed check so items aren't re-picked-up
+    (0x201b9100, 0x00000000, 0x26000010),  # b return → nop (skip timer wait)
 ]
 
 # --- Event skip ---

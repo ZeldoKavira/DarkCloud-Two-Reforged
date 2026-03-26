@@ -21,12 +21,14 @@ def _refresh_collected(mem):
     global _collected_ideas
     s = set()
     try:
-        data = mem.read_bytes(_PINE + _NETA_BASE, 1024)
-        for i in range(512):
-            nid = int.from_bytes(data[i*2:i*2+2], 'little')
+        for i in range(256):
+            nid = mem.read_short(_PINE + _NETA_BASE + i * 2)
             if nid == 0:
                 break
             s.add(nid)
+    except Exception:
+        pass
+    try:
         for i in range(30):
             base = _PINE + _PHOTO_BASE + i * 0x18
             if mem.read_byte(base) == 0:

@@ -196,6 +196,8 @@ class App:
         debug.pack(fill=tk.X, padx=8, pady=8)
         tk.Button(debug, text="Test Inject", command=self._test_dialog,
                   bg=ACCENT, fg=FG, font=("Helvetica", 10)).pack(anchor=tk.W)
+        tk.Button(debug, text="Fix Inventory", command=self._fix_inventory,
+                  bg=ACCENT, fg=FG, font=("Helvetica", 10)).pack(anchor=tk.W, pady=(4, 0))
         tk.Button(debug, text="Dump Message Table", command=self._dump_msg_table,
                   bg=ACCENT, fg=FG, font=("Helvetica", 10)).pack(anchor=tk.W, pady=(4, 0))
 
@@ -658,6 +660,29 @@ class App:
         122: "1",        123: "2",        124: "3",
         125: "Normal2",  126: "Reverse",
     }
+
+    def _fix_inventory(self):
+        """Remove duplicate dungeon keys, keep at most 1 with count=1."""
+        mem = self.state.mem
+        if not mem.connected:
+            return
+        found_key = False
+        for base, count in [(addr.USER_DATA_MANAGER, addr.INVENTORY_SLOT_COUNT),
+                            (addr.EQUIP_SLOT_BASE, addr.EQUIP_SLOT_COUNT),
+                            (addr.EQUIP_SLOT_BASE_MON, addr.EQUIP_SLOT_COUNT)]:
+            for i in range(count):
+                slot = base + i * addr.INVENTORY_SLOT_SIZE
+                iid = mem.read_short(slot + 2)
+                if 0x0151 <= iid <= 0x015F:
+                    if found_key:
+                        # duplicate — clear it
+                        mem.write_short(slot + 0x00, 0)
+                        mem.write_short(slot + 0x02, 0)
+                        mem.write_short(slot + 0x10, 0)
+                    else:
+                        # first one — set count to 1
+                        mem.write_short(slot + 0x10, 1)
+                        found_key = True
 
     def _test_dialog(self):
         """Scan scene struct for fish pointer arrays."""

@@ -100,7 +100,7 @@ class Memory:
                     pos += 1
                 vals = self.ipc.batch(cmds)
                 for i, cmd in enumerate(cmds):
-                    v = vals[i] if vals[i] is not None else 0
+                    v = vals[i] if i < len(vals) and vals[i] is not None else 0
                     if cmd[0] == MSG_READ32:
                         result.extend(struct.pack("<I", v))
                     else:
