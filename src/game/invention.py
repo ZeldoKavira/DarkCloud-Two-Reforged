@@ -18,9 +18,10 @@ def _scan_discovered(mem: Memory) -> tuple[set[int], int]:
         return set(), 1
     found = set()
     base = _PINE + iud + 0x6D8
+    data = mem.read_bytes(base, 256 * 4)
     # Slot 0 is always 0 ("New Invention"), start from 1
     for i in range(1, 256):
-        item = mem.read_short(base + i * 4)
+        item = int.from_bytes(data[i*4:i*4+2], 'little')
         if item == 0:
             return found, i
         found.add(item)
@@ -48,10 +49,11 @@ def tick(mem: Memory):
                 _discovered, _next_slot = _scan_discovered(mem)
 
     # Read all memo ideas
+    memo_data = mem.read_bytes(addr.NETA_MEMO_ID, 128)
     memo_ideas = set()
     memo_list = []
     for i in range(64):
-        mid = mem.read_short(addr.NETA_MEMO_ID + i * 2)
+        mid = int.from_bytes(memo_data[i*2:i*2+2], 'little')
         memo_list.append(mid)
         if mid != 0:
             memo_ideas.add(mid)
@@ -88,24 +90,23 @@ def tick(mem: Memory):
 
     # Write dim table
     memo_count = 0
-    dim_table = []
+    dim_bytes = bytearray(64)
     for i in range(64):
         mid = memo_list[i]
         if mid != 0:
             memo_count = i + 1
-        dim = 0 if mid != 0 and mid in valid else 1
-        dim_table.append(dim)
-        mem.write_byte(addr.INVENT_DIM_TABLE + i, dim)
+        dim_bytes[i] = 0 if mid != 0 and mid in valid else 1
+    mem.write_bytes(addr.INVENT_DIM_TABLE, bytes(dim_bytes))
 
     # Cursor skip: if cursor is on a dimmed entry, move in the direction of travel
     cursor = mem.read_int(_PINE + menu + 0x134)
     if _prev_cursor < 0:
         _prev_cursor = cursor
-    if 0 <= cursor < memo_count and dim_table[cursor] == 1:
+    if 0 <= cursor < memo_count and dim_bytes[cursor] == 1:
         step = -1 if cursor < _prev_cursor else 1
         pos = cursor + step
         while 0 <= pos < memo_count:
-            if dim_table[pos] == 0:
+            if dim_bytes[pos] == 0:
                 mem.write_int(_PINE + menu + 0x134, pos)
                 cursor = pos
                 break

@@ -3,6 +3,7 @@
 import logging
 from core.memory import Memory
 from game import addresses as addr
+from data.idea_names import IDEA_NAMES
 
 log = logging.getLogger(__name__)
 
@@ -20,8 +21,9 @@ def _refresh_collected(mem):
     global _collected_ideas
     s = set()
     try:
+        data = mem.read_bytes(_PINE + _NETA_BASE, 1024)
         for i in range(512):
-            nid = mem.read_short(_PINE + _NETA_BASE + i * 2)
+            nid = int.from_bytes(data[i*2:i*2+2], 'little')
             if nid == 0:
                 break
             s.add(nid)
@@ -48,35 +50,10 @@ _last_active_monster = 0
 # Object ideas seen via InScreenFunc (accumulated during camera use)
 _seen_object_ideas: set[int] = set()
 _last_scene_ptr = 0
-# Cached idea ID → name from pic_name_info
-_idea_names: dict[int, str] = {}
 
 
-def _lookup_idea_name(mem, idea_id):
-    """Look up idea name from pic_name_info table. Cached."""
-    if idea_id in _idea_names:
-        return _idea_names[idea_id]
-    top = mem.read_int(0x203775E0)  # pic_name_info_top
-    num = mem.read_short(0x203775E2)  # pic_name_info_num
-    if top == 0 or num == 0:
-        return ""
-    for i in range(min(num, 500)):
-        eid = mem.read_short(_PINE + top + i * 8)
-        if eid == idea_id:
-            np = mem.read_int(_PINE + top + i * 8 + 4)
-            if np == 0:
-                break
-            raw = b''
-            for j in range(0, 24, 4):
-                w = mem.read_int(_PINE + np + j)
-                raw += w.to_bytes(4, 'little')
-                if b'\x00' in w.to_bytes(4, 'little'):
-                    break
-            name = raw.split(b'\x00')[0].decode('ascii', errors='replace')
-            _idea_names[idea_id] = name
-            return name
-    _idea_names[idea_id] = ""
-    return ""
+def _lookup_idea_name(idea_id):
+    return IDEA_NAMES.get(idea_id, "")
 
 
 def _scan_scene_ideas(mem):
@@ -163,9 +140,7 @@ def _write_idea_text(mem, text: str):
     """Write ASCII string to IDEA_TEXT buffer (256 bytes max)."""
     raw = text.encode("ascii", errors="replace")[:_IDEA_TEXT_SIZE - 1] + b"\x00"
     raw = raw.ljust(_IDEA_TEXT_SIZE, b"\x00")
-    for i in range(0, _IDEA_TEXT_SIZE, 4):
-        word = int.from_bytes(raw[i:i + 4], "little")
-        mem.write_int(addr.IDEA_TEXT + i, word & 0xFFFFFFFF)
+    mem.write_bytes(addr.IDEA_TEXT, raw)
 
 
 def tick(mem, loop_no):
@@ -206,7 +181,7 @@ def tick(mem, loop_no):
             text = f"{count} Idea{'s' if count != 1 else ''} nearby"
             if mem.read_byte(addr.OPTION_SAVE_IDEA_NAMES) == 1:
                 for uid in uncollected:
-                    name = _lookup_idea_name(mem, uid)
+                    name = _lookup_idea_name(uid)
                     if name:
                         line = f"\n- {name}"
                         if len(text) + len(line) >= _IDEA_TEXT_SIZE - 1:
@@ -232,14 +207,14 @@ def tick(mem, loop_no):
         # 12bc != 0 → guaranteed idea
         scoop = _type_to_scoop.get(mtype)
         if scoop and not _is_idea_collected(scoop):
-            name = _lookup_idea_name(mem, scoop)
+            name = _lookup_idea_name(scoop)
             _write_idea_text(mem, f"New Idea: {name}" if name else "New Idea")
             return
         # 12bc == 0 but valid scoop exists → potential (unless already photographed)
         scoop_any = _type_to_scoop_any.get(mtype)
         if scoop_any and not _is_idea_collected(scoop_any):
             if mtype not in getattr(tick, '_photographed', set()):
-                name = _lookup_idea_name(mem, scoop_any)
+                name = _lookup_idea_name(scoop_any)
                 _write_idea_text(mem, f"Potential: {name}" if name else "Potential Idea")
                 return
 
@@ -247,7 +222,7 @@ def tick(mem, loop_no):
     obj_id = mem.read_int(addr.IDEA_OBJECT_ID)
     if obj_id > 0 and obj_id < 0x10000:
         if not _is_idea_collected(obj_id):
-            name = _lookup_idea_name(mem, obj_id)
+            name = _lookup_idea_name(obj_id)
             _write_idea_text(mem, f"New Idea: {name}" if name else "New Idea")
             return
 

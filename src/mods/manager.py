@@ -34,6 +34,7 @@ class ModManager:
         self.auto_repair = False
         self.auto_key = False
         self.jp_prices = False
+        self.invent_dim = True
         self.on_options_loaded = None
         self.on_early_texture_patch = None
         self.all_mods = []
@@ -135,7 +136,7 @@ class ModManager:
                     except Exception:
                         pass
                     try:
-                        if self.mem.read_byte(addr.OPTION_SAVE_INVENT_DIM) != 1:
+                        if self.invent_dim:
                             invention_tick(self.mem)
                     except Exception:
                         pass
@@ -216,6 +217,7 @@ class ModManager:
         self.auto_repair = self.mem.read_byte(addr.OPTION_SAVE_AUTO_REPAIR) == 1
         self.auto_key = self.mem.read_byte(addr.OPTION_SAVE_AUTO_KEY) == 1
         self.jp_prices = self.mem.read_byte(addr.OPTION_SAVE_JP_PRICES) == 1
+        self.invent_dim = self.mem.read_byte(addr.OPTION_SAVE_INVENT_DIM) != 1
         dungeon_hud = self.mem.read_byte(addr.OPTION_SAVE_DUNGEON_HUD) != 1
         synth_hud = self.mem.read_byte(addr.OPTION_SAVE_SYNTH_HUD) != 1
         settings.set("auto_repair", self.auto_repair)

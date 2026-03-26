@@ -123,6 +123,7 @@ class GameState:
             log.debug("Poll error: %s", e)
             self.mem.disconnect()
             snap.connected = False
+            snap.dc2_detected = False
             snap.error = f"Connection lost: {e}"
 
         self._notify()
@@ -136,12 +137,13 @@ class GameState:
             snap.error = "No game running"
             return
 
-        # DC2 detection via PINE game ID
-        game_id = mem.game_id().strip().strip('\x00')
-        snap.dc2_detected = game_id.startswith(addr.DC2_GAME_ID)
+        # DC2 detection — cache after first successful check
         if not snap.dc2_detected:
-            snap.error = f"Dark Cloud 2 not detected (got: {game_id!r})"
-            return
+            game_id = mem.game_id().strip().strip('\x00')
+            snap.dc2_detected = game_id.startswith(addr.DC2_GAME_ID)
+            if not snap.dc2_detected:
+                snap.error = f"Dark Cloud 2 not detected (got: {game_id!r})"
+                return
 
         # Frame counter for save state detection
         snap.prev_frame_counter = snap.frame_counter

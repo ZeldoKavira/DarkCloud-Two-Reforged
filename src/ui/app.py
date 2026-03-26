@@ -1364,6 +1364,7 @@ class App:
 
     def _on_invent_dim_change(self, val):
         self.state.mem.write_byte(addr.OPTION_SAVE_INVENT_DIM, 0 if val == 0 else 1)
+        self.manager.invent_dim = val == 0
         if val == 1:
             for i in range(64):
                 self.state.mem.write_byte(addr.INVENT_DIM_TABLE + i, 0)
