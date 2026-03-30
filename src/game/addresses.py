@@ -348,7 +348,7 @@ IDEA_OBJECT_ID = 0x21F70078        # Object/scenery idea ID in viewfinder (-1=no
 IDEA_MONSTER_SCOOP = 0x21F7007C    # Monster scoop ID from CheckPhoto (-1=none)
 TAKE_PHOTO_MODE = 0x20378710       # Camera state: 0=off, 2=viewfinder, 3=shutter, 5=capture
 IDEA_TEXT = 0x21F711A0             # 256-byte ASCII string for idea HUD (written by Python)
-INVENT_DIM_TABLE = 0x21F71400      # 64-byte dim table for invention memo list (0=bright, 1=dim)
+INVENT_DIM_TABLE = 0x21F71400      # 256-byte dim table for invention memo list (0=bright, 1=dim)
 CMENU_INVENT_PTR = 0x20377668      # CMenuInventPt (gp - 0x6E88)
 NETA_MEMO_ID = 0x21ECBFD0          # NetaMemoID array (shorts, idea IDs for memo list)
 PHOTO_BASE = 0x21E26DE8            # Photo info array (30 slots × 0x18, idea ID at +0x0A)

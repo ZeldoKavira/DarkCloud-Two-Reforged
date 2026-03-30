@@ -170,11 +170,17 @@ class PineIPC:
         off = 0
         for cmd in commands:
             op = cmd[0]
+            if off >= len(resp):
+                results.append(None)
+                continue
             status = resp[off]; off += 1
             if status == IPC_FAIL:
                 results.append(None)
                 continue
             sz = _RESP_SIZES.get(op, 0)
+            if off + sz > len(resp):
+                results.append(None)
+                break
             if sz == 0:
                 results.append(None)
             elif sz == 1:

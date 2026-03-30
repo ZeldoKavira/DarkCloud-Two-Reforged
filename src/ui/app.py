@@ -1391,7 +1391,7 @@ class App:
         self.state.mem.write_byte(addr.OPTION_SAVE_INVENT_DIM, 0 if val == 0 else 1)
         self.manager.invent_dim = val == 0
         if val == 1:
-            for i in range(64):
+            for i in range(256):
                 self.state.mem.write_byte(addr.INVENT_DIM_TABLE + i, 0)
 
     def _on_buildup_helper_change(self, val):

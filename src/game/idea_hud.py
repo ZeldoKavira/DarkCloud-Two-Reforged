@@ -138,11 +138,20 @@ def _build_type_scoop_map(mem):
 _IDEA_TEXT_SIZE = 256
 
 
+_last_idea_text = ""
+
+
 def _write_idea_text(mem, text: str):
     """Write ASCII string to IDEA_TEXT buffer (256 bytes max)."""
+    global _last_idea_text
+    if text == _last_idea_text:
+        return
+    _last_idea_text = text
     raw = text.encode("ascii", errors="replace")[:_IDEA_TEXT_SIZE - 1] + b"\x00"
     raw = raw.ljust(_IDEA_TEXT_SIZE, b"\x00")
-    mem.write_bytes(addr.IDEA_TEXT, raw)
+    for i in range(0, _IDEA_TEXT_SIZE, 4):
+        word = int.from_bytes(raw[i:i + 4], "little")
+        mem.write_int(addr.IDEA_TEXT + i, word & 0xFFFFFFFF)
 
 
 def tick(mem, loop_no):
