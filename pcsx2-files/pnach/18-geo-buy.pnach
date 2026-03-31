@@ -1,0 +1,60 @@
+// Geo buy PNACH
+//
+// Part 1 (0x01F71800): Skip error when GEO_BUY_FLAG is set, redirect to confirm
+// Part 2 (0x01F71880): When ACTIVE, switch msg to 0x0C51 (buy text), clear ACTIVE
+//
+// Flags:
+//   0x01F71840: GEO_BUY_FLAG  — Python sets 1 when buy is available
+//   0x01F71844: GEO_BUY_ACTIVE — Part 1 sets 1, Part 2 clears after use
+//
+// Material data at 0x01F71850+ (written by Python)
+
+// ============================================================
+// Part 1: Hook at 0x001FA120 — intercept error/confirm branch
+// ============================================================
+patch=1,EE,201FA120,extended,087DC600 // j 0x01F71800
+patch=1,EE,201FA124,extended,00000000 // nop
+
+patch=1,EE,21F71800,extended,12200003 // beq s1, zero, check_flag
+patch=1,EE,21F71804,extended,00000000 // nop
+patch=1,EE,21F71808,extended,0807E851 // j 0x001FA144 (confirm)
+patch=1,EE,21F7180C,extended,3C050037 // delay: lui a1, 0x37
+
+// check_flag:
+patch=1,EE,21F71810,extended,3C0101F7 // lui at, 0x01F7
+patch=1,EE,21F71814,extended,8C221840 // lw v0, 0x1840(at)
+patch=1,EE,21F71818,extended,10400005 // beq v0, zero, error_path
+patch=1,EE,21F7181C,extended,00000000 // nop
+patch=1,EE,21F71820,extended,AC201840 // sw zero, 0x1840(at) — clear FLAG
+patch=1,EE,21F71824,extended,24020001 // li v0, 1
+patch=1,EE,21F71828,extended,AC221844 // sw v0, 0x1844(at) — ACTIVE=1
+patch=1,EE,21F7182C,extended,0807E851 // j 0x001FA144 (confirm)
+patch=1,EE,21F71830,extended,3C050037 // delay: lui a1, 0x37
+
+// error_path:
+patch=1,EE,21F71834,extended,0807E84A // j 0x001FA128
+patch=1,EE,21F71838,extended,3C050037 // delay: lui a1, 0x37
+
+// ============================================================
+// Part 2: Hook SetMsgItemNo at 0x001FA174
+// ============================================================
+patch=1,EE,201FA174,extended,0C7DC620 // jal 0x01F71880
+
+patch=1,EE,21F71880,extended,3C0101F7 // lui at, 0x01F7
+patch=1,EE,21F71884,extended,8C211844 // lw at, 0x1844(at)
+patch=1,EE,21F71888,extended,1020000B // beq at, zero, normal_msg (0x01F718B8)
+patch=1,EE,21F7188C,extended,00000000 // nop
+
+// Buy path: clear ACTIVE, switch msg to 0x0C51, set state=2, skip to end
+patch=1,EE,21F71890,extended,3C0101F7 // lui at, 0x01F7
+patch=1,EE,21F71894,extended,AC201844 // sw zero, 0x1844(at) — ACTIVE=0
+patch=1,EE,21F71898,extended,34030C51 // li v1, 0x0C51
+patch=1,EE,21F7189C,extended,A60321E6 // sh v1, 0x21E6(s0)
+patch=1,EE,21F718A0,extended,24030002 // li v1, 2
+patch=1,EE,21F718A4,extended,A6430002 // sh v1, 0x02(s2) — state=2
+patch=1,EE,21F718A8,extended,0807E8CE // j 0x001FA338 (end of IsMakeObject)
+patch=1,EE,21F718AC,extended,00000000 // nop
+
+// normal_msg: tail-call SetMsgItemNo (preserves ra)
+patch=1,EE,21F718B8,extended,08087720 // j SetMsgItemNo (0x0021DC80)
+patch=1,EE,21F718BC,extended,00000000 // nop

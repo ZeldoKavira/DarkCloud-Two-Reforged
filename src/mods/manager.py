@@ -12,7 +12,7 @@ from game.fishing_hud import write_fishing_hud
 from game import render
 from game.idea_hud import tick as idea_hud_tick
 from game.invention import tick as invention_tick
-from mods import auto_repair, auto_key, event_skip, map_reveal, jp_prices
+from mods import auto_repair, auto_key, event_skip, map_reveal, jp_prices, geo_buy
 
 render.register("idea_hud", idea_hud_tick)
 
@@ -174,6 +174,11 @@ class ModManager:
                         write_gift_box_hud(self.mem, None)
                     except Exception:
                         pass
+                if hud_counter % 5 == 1:
+                    try:
+                        geo_buy.tick(self.mem, getattr(self, 'dialog', None))
+                    except Exception as e:
+                        log.error("geo_buy error: %s", e)
 
             time.sleep(0.016)
 
